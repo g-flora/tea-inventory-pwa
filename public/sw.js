@@ -1,5 +1,7 @@
 const CACHE_NAME = 'tea-inventory-pwa-v1'
-const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icon.svg']
+const BASE_PATH = new URL(self.registration.scope).pathname.replace(/\/$/, '')
+const pathFor = (path) => `${BASE_PATH}${path}`
+const APP_SHELL = [pathFor('/'), pathFor('/index.html'), pathFor('/manifest.webmanifest'), pathFor('/icon.svg')]
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -34,6 +36,6 @@ self.addEventListener('fetch', (event) => {
         caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy))
         return response
       })
-      .catch(() => caches.match(event.request).then((cached) => cached || caches.match('/index.html'))),
+      .catch(() => caches.match(event.request).then((cached) => cached || caches.match(pathFor('/index.html')))),
   )
 })

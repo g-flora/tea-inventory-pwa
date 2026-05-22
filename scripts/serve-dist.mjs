@@ -6,6 +6,7 @@ import { extname, join, normalize } from 'node:path'
 
 const port = Number(process.env.PORT || 4173)
 const host = process.env.HOST || '0.0.0.0'
+const basePath = '/tea-inventory-pwa'
 const root = join(process.cwd(), 'dist')
 
 const contentTypes = {
@@ -19,7 +20,10 @@ const contentTypes = {
 
 createServer(async (request, response) => {
   const url = new URL(request.url || '/', `http://${request.headers.host}`)
-  const safePath = normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.[/\\])+/, '')
+  const pathname = url.pathname.startsWith(`${basePath}/`)
+    ? url.pathname.slice(basePath.length)
+    : url.pathname
+  const safePath = normalize(decodeURIComponent(pathname)).replace(/^(\.\.[/\\])+/, '')
   const requestedPath = join(root, safePath)
   const filePath = existsSync(requestedPath) && (await stat(requestedPath)).isFile()
     ? requestedPath
@@ -28,9 +32,9 @@ createServer(async (request, response) => {
   response.setHeader('Content-Type', contentTypes[extname(filePath)] || 'application/octet-stream')
   createReadStream(filePath).pipe(response)
 }).listen(port, host, () => {
-  console.log(`Static preview: http://localhost:${port}`)
+  console.log(`Static preview: http://localhost:${port}${basePath}/`)
   for (const address of getLocalIpv4Addresses()) {
-    console.log(`Phone preview:  http://${address}:${port}`)
+    console.log(`Phone preview:  http://${address}:${port}${basePath}/`)
   }
 })
 
