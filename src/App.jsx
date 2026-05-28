@@ -16,7 +16,12 @@ import {
 import { createWorker, OEM } from 'tesseract.js'
 import { hasSupabaseConfig, supabase } from './lib/supabaseClient'
 import { buildAirRegiCsv, getInventoryStatus, sortInventory, todayText } from './lib/inventory'
-import { extractExpiryDateFromOcr, matchProductNameFromOcr } from './lib/ocr'
+import {
+  extractExpiryDateFromOcr,
+  getExpiryDateCandidatesFromOcr,
+  getProductNameCandidatesFromOcr,
+  matchProductNameFromOcr,
+} from './lib/ocr'
 
 const TABLE_NAME = 'tea_inventory'
 
@@ -61,6 +66,8 @@ export default function App() {
     progress: 0,
     text: '',
     notice: '',
+    productCandidates: [],
+    expiryDateCandidates: [],
   })
 
   const loadInventory = useCallback(async () => {
@@ -142,6 +149,14 @@ export default function App() {
     } else {
       setMessage('入荷を登録しました。')
       setForm(initialForm())
+      setOcrState({
+        busy: false,
+        progress: 0,
+        text: '',
+        notice: '',
+        productCandidates: [],
+        expiryDateCandidates: [],
+      })
       await loadInventory()
       setActiveView('list')
     }
@@ -159,6 +174,8 @@ export default function App() {
       progress: 0,
       text: '',
       notice: 'OCR処理中です。画像は保存しません。',
+      productCandidates: [],
+      expiryDateCandidates: [],
     })
 
     let worker = null
@@ -177,6 +194,8 @@ export default function App() {
 
       const result = await worker.recognize(imageBlob)
       const text = result.data.text || ''
+      const productCandidates = getProductNameCandidatesFromOcr(text, productNameOptions)
+      const expiryDateCandidates = getExpiryDateCandidatesFromOcr(text)
       const matchedProductName = matchProductNameFromOcr(text, productNameOptions)
       const expiryDate = extractExpiryDateFromOcr(text)
       const applied = []
@@ -200,6 +219,8 @@ export default function App() {
         busy: false,
         progress: 100,
         text,
+        productCandidates,
+        expiryDateCandidates,
         notice: applied.length
           ? `${applied.join('・')}を仮入力しました。確認してから登録してください。`
           : '読み取りましたが自動入力できませんでした。手入力で修正してください。',
@@ -210,6 +231,8 @@ export default function App() {
         progress: 0,
         text: '',
         notice: 'OCRに失敗しました。手入力で登録できます。',
+        productCandidates: [],
+        expiryDateCandidates: [],
       })
       setError(ocrError instanceof Error ? ocrError.message : 'OCRに失敗しました。')
     } finally {
@@ -503,6 +526,42 @@ function RegisterView({ form, ocrState, saving, onChange, onOcrBlob, onSubmit })
         {cameraError && <p className="ocr-notice error">{cameraError}</p>}
         {cameraActive && !cameraReady && !cameraError && <p className="ocr-notice">カメラ映像を準備中です。</p>}
         {ocrState.notice && <p className="ocr-notice">{ocrState.notice}</p>}
+
+        {(ocrState.productCandidates?.length > 0 || ocrState.expiryDateCandidates?.length > 0) && (
+          <div className="ocr-result">
+            {ocrState.productCandidates?.length > 0 && (
+              <div style={{ display: 'grid', gap: '8px', marginBottom: '12px' }}>
+                <p>{'商品名候補'}</p>
+                {ocrState.productCandidates.map((candidate) => (
+                  <button
+                    className="icon-text-button"
+                    type="button"
+                    key={candidate.name}
+                    onClick={() => onChange('product_name', candidate.name)}
+                  >
+                    {candidate.name}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {ocrState.expiryDateCandidates?.length > 0 && (
+              <div style={{ display: 'grid', gap: '8px' }}>
+                <p>{'賞味期限候補'}</p>
+                {ocrState.expiryDateCandidates.map((candidate) => (
+                  <button
+                    className="icon-text-button"
+                    type="button"
+                    key={candidate.value}
+                    onClick={() => onChange('expiry_date', candidate.value)}
+                  >
+                    {candidate.value}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {ocrState.text && (
           <details className="ocr-result">
