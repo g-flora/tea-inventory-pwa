@@ -804,3 +804,58 @@ h1 {
   background: #fff7f6;
   color: var(--red);
 }
+
+.edit-dialog label {
+  display: grid;
+  gap: 7px;
+  color: var(--ink);
+  font-weight: 900;
+}
+
+.edit-dialog select,
+.edit-dialog input {
+  min-height: 48px;
+  border: 1px solid #cdd9d2;
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.confirm-actions .primary-button {
+  min-height: 46px;
+  margin-top: 0;
+  box-shadow: none;
+}
+
+.card-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.edit-item-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  border: 1px solid #b8d3c7;
+  border-radius: 8px;
+  background: #f0fbf6;
+  color: var(--green);
+  font-weight: 900;
+}
+
+.card-actions .delete-item-button {
+  margin-top: 0;
+}
+
+@media (max-width: 420px) {
+  .confirm-actions,
+  .card-actions {
+    grid-template-columns: 1fr;
+  }
+}

@@ -9,6 +9,7 @@ import {
   Minus,
   PackagePlus,
   Plus,
+  Pencil,
   RefreshCcw,
   Save,
   Trash2,
@@ -62,6 +63,13 @@ export default function App() {
   const [updatingId, setUpdatingId] = useState(null)
   const [deletingId, setDeletingId] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [editingId, setEditingId] = useState(null)
+  const [editTarget, setEditTarget] = useState(null)
+  const [editForm, setEditForm] = useState({
+    product_name: '',
+    expiry_date: '',
+    quantity: 0,
+  })
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [ocrState, setOcrState] = useState({
@@ -272,6 +280,62 @@ export default function App() {
     setUpdatingId(null)
   }
 
+
+  function requestEditItem(item) {
+    setMessage('')
+    setError('')
+    setEditTarget(item)
+    setEditForm({
+      product_name: item.product_name ?? '',
+      expiry_date: item.expiry_date ?? '',
+      quantity: Number(item.quantity ?? 0),
+    })
+  }
+
+  function cancelEditItem() {
+    if (editingId) return
+    setEditTarget(null)
+  }
+
+  function updateEditForm(field, value) {
+    setEditForm((current) => ({ ...current, [field]: value }))
+  }
+
+  async function confirmEditItem(event) {
+    event.preventDefault()
+    if (!hasSupabaseConfig || !editTarget) return
+
+    const nextQuantity = Number(editForm.quantity)
+
+    if (!editForm.product_name || !editForm.expiry_date || Number.isNaN(nextQuantity) || nextQuantity < 0) {
+      setError('\u5546\u54c1\u540d\u3001\u8cde\u5473\u671f\u9650\u3001\u5728\u5eab\u6570\u3092\u78ba\u8a8d\u3057\u3066\u304f\u3060\u3055\u3044\u3002')
+      return
+    }
+
+    setEditingId(editTarget.id)
+    setMessage('')
+    setError('')
+
+    const { error: updateError } = await supabase
+      .from(TABLE_NAME)
+      .update({
+        product_name: editForm.product_name,
+        expiry_date: editForm.expiry_date,
+        quantity: nextQuantity,
+      })
+      .eq('id', editTarget.id)
+
+    if (updateError) {
+      setError(updateError.message)
+    } else {
+      setMessage('\u5728\u5eab\u30c7\u30fc\u30bf\u3092\u66f4\u65b0\u3057\u307e\u3057\u305f\u3002')
+      setEditTarget(null)
+      await loadInventory()
+    }
+
+    setEditingId(null)
+  }
+
   function requestDeleteItem(item) {
     setMessage('')
     setError('')
@@ -351,6 +415,58 @@ export default function App() {
         <SummaryTile label="在庫少" value={`${lowStockCount} 件`} tone={lowStockCount ? 'danger' : ''} />
       </section>
 
+
+      {editTarget && (
+        <div className="confirm-backdrop" role="dialog" aria-modal="true" aria-labelledby="edit-confirm-title">
+          <form className="confirm-dialog edit-dialog" onSubmit={confirmEditItem}>
+            <h2 id="edit-confirm-title">{'\u5728\u5eab\u30c7\u30fc\u30bf\u3092\u7de8\u96c6'}</h2>
+            <label>
+              <span>{'\u5546\u54c1\u540d'}</span>
+              <select
+                value={editForm.product_name}
+                onChange={(event) => updateEditForm('product_name', event.target.value)}
+                required
+              >
+                <option value="">{'\u5546\u54c1\u540d\u3092\u9078\u3093\u3067\u304f\u3060\u3055\u3044'}</option>
+                {productNameOptions.map((productName) => (
+                  <option key={productName} value={productName}>
+                    {productName}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>{'\u8cde\u5473\u671f\u9650'}</span>
+              <input
+                type="date"
+                value={editForm.expiry_date}
+                onChange={(event) => updateEditForm('expiry_date', event.target.value)}
+                required
+              />
+            </label>
+            <label>
+              <span>{'\u5728\u5eab\u6570'}</span>
+              <input
+                type="number"
+                min="0"
+                inputMode="numeric"
+                value={editForm.quantity}
+                onChange={(event) => updateEditForm('quantity', event.target.value)}
+                required
+              />
+            </label>
+            <div className="confirm-actions">
+              <button className="primary-button" type="submit" disabled={Boolean(editingId)}>
+                {editingId ? '\u66f4\u65b0\u4e2d...' : '\u66f4\u65b0\u3059\u308b'}
+              </button>
+              <button className="icon-text-button" type="button" onClick={cancelEditItem} disabled={Boolean(editingId)}>
+                {'\u30ad\u30e3\u30f3\u30bb\u30eb'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {deleteTarget && (
         <div className="confirm-backdrop" role="dialog" aria-modal="true" aria-labelledby="delete-confirm-title">
           <div className="confirm-dialog">
@@ -387,8 +503,10 @@ export default function App() {
             loading={loading}
             updatingId={updatingId}
             deletingId={deletingId}
+            editingId={editingId}
             onRefresh={loadInventory}
             onUpdateQuantity={updateQuantity}
+            onRequestEdit={requestEditItem}
             onRequestDelete={requestDeleteItem}
           />
         )}
@@ -719,7 +837,18 @@ function RegisterView({ form, ocrState, saving, onChange, onOcrBlob, onSubmit })
   )
 }
 
-function InventoryView({ alertItems, items, loading, updatingId, deletingId, onRefresh, onUpdateQuantity, onRequestDelete }) {
+function InventoryView({
+  alertItems,
+  items,
+  loading,
+  updatingId,
+  deletingId,
+  editingId,
+  onRefresh,
+  onUpdateQuantity,
+  onRequestEdit,
+  onRequestDelete,
+}) {
   return (
     <section className="screen-panel">
       <div className="section-heading with-action">
@@ -744,7 +873,9 @@ function InventoryView({ alertItems, items, loading, updatingId, deletingId, onR
               item={item}
               updating={updatingId === item.id}
               deleting={deletingId === item.id}
+              editing={editingId === item.id}
               onUpdateQuantity={onUpdateQuantity}
+              onRequestEdit={onRequestEdit}
               onRequestDelete={onRequestDelete}
             />
           ))}
@@ -766,7 +897,9 @@ function InventoryView({ alertItems, items, loading, updatingId, deletingId, onR
               item={item}
               updating={updatingId === item.id}
               deleting={deletingId === item.id}
+              editing={editingId === item.id}
               onUpdateQuantity={onUpdateQuantity}
+              onRequestEdit={onRequestEdit}
               onRequestDelete={onRequestDelete}
             />
           ))}
@@ -778,7 +911,7 @@ function InventoryView({ alertItems, items, loading, updatingId, deletingId, onR
   )
 }
 
-function InventoryCard({ item, updating, deleting, onUpdateQuantity, onRequestDelete }) {
+function InventoryCard({ item, updating, deleting, editing, onUpdateQuantity, onRequestEdit, onRequestDelete }) {
   const status = item.status
   const nextMinus = Math.max(0, Number(item.quantity) - 1)
   const nextPlus = Number(item.quantity) + 1
@@ -845,15 +978,26 @@ function InventoryCard({ item, updating, deleting, onUpdateQuantity, onRequestDe
 
       {item.memo && <p className="memo-text">{item.memo}</p>}
 
-      <button
-        className="delete-item-button"
-        type="button"
-        onClick={() => onRequestDelete(item)}
-        disabled={updating || deleting}
-      >
-        <Trash2 size={18} />
-        {deleting ? '削除中...' : '削除'}
-      </button>
+      <div className="card-actions">
+        <button
+          className="edit-item-button"
+          type="button"
+          onClick={() => onRequestEdit(item)}
+          disabled={updating || deleting || editing}
+        >
+          <Pencil size={18} />
+          {editing ? '\u7de8\u96c6\u4e2d...' : '\u7de8\u96c6'}
+        </button>
+        <button
+          className="delete-item-button"
+          type="button"
+          onClick={() => onRequestDelete(item)}
+          disabled={updating || deleting || editing}
+        >
+          <Trash2 size={18} />
+          {deleting ? '\u524a\u9664\u4e2d...' : '\u524a\u9664'}
+        </button>
+      </div>
     </article>
   )
 }
