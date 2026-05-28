@@ -11,6 +11,7 @@ import {
   Plus,
   RefreshCcw,
   Save,
+  Trash2,
   WifiOff,
 } from 'lucide-react'
 import { createWorker, OEM } from 'tesseract.js'
@@ -59,6 +60,8 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [updatingId, setUpdatingId] = useState(null)
+  const [deletingId, setDeletingId] = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [ocrState, setOcrState] = useState({
@@ -269,6 +272,37 @@ export default function App() {
     setUpdatingId(null)
   }
 
+  function requestDeleteItem(item) {
+    setMessage('')
+    setError('')
+    setDeleteTarget(item)
+  }
+
+  function cancelDeleteItem() {
+    if (deletingId) return
+    setDeleteTarget(null)
+  }
+
+  async function confirmDeleteItem() {
+    if (!hasSupabaseConfig || !deleteTarget) return
+
+    setDeletingId(deleteTarget.id)
+    setMessage('')
+    setError('')
+
+    const { error: deleteError } = await supabase.from(TABLE_NAME).delete().eq('id', deleteTarget.id)
+
+    if (deleteError) {
+      setError(deleteError.message)
+    } else {
+      setMessage('在庫データを削除しました。')
+      setDeleteTarget(null)
+      await loadInventory()
+    }
+
+    setDeletingId(null)
+  }
+
   function downloadCsv() {
     const csv = buildAirRegiCsv(enrichedInventory)
     const blob = new Blob(['\ufeff', csv], { type: 'text/csv;charset=utf-8;' })
@@ -317,6 +351,23 @@ export default function App() {
         <SummaryTile label="在庫少" value={`${lowStockCount} 件`} tone={lowStockCount ? 'danger' : ''} />
       </section>
 
+      {deleteTarget && (
+        <div className="confirm-backdrop" role="dialog" aria-modal="true" aria-labelledby="delete-confirm-title">
+          <div className="confirm-dialog">
+            <h2 id="delete-confirm-title">この在庫データを削除しますか？</h2>
+            <p>{deleteTarget.product_name}</p>
+            <div className="confirm-actions">
+              <button className="danger-button" type="button" onClick={confirmDeleteItem} disabled={Boolean(deletingId)}>
+                {deletingId ? '削除中...' : '削除する'}
+              </button>
+              <button className="icon-text-button" type="button" onClick={cancelDeleteItem} disabled={Boolean(deletingId)}>
+                キャンセル
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <main className="main-content">
         {activeView === 'register' && (
           <RegisterView
@@ -335,8 +386,10 @@ export default function App() {
             items={enrichedInventory}
             loading={loading}
             updatingId={updatingId}
+            deletingId={deletingId}
             onRefresh={loadInventory}
             onUpdateQuantity={updateQuantity}
+            onRequestDelete={requestDeleteItem}
           />
         )}
 
@@ -666,7 +719,7 @@ function RegisterView({ form, ocrState, saving, onChange, onOcrBlob, onSubmit })
   )
 }
 
-function InventoryView({ alertItems, items, loading, updatingId, onRefresh, onUpdateQuantity }) {
+function InventoryView({ alertItems, items, loading, updatingId, deletingId, onRefresh, onUpdateQuantity, onRequestDelete }) {
   return (
     <section className="screen-panel">
       <div className="section-heading with-action">
@@ -690,7 +743,9 @@ function InventoryView({ alertItems, items, loading, updatingId, onRefresh, onUp
               key={`alert-${item.id}`}
               item={item}
               updating={updatingId === item.id}
+              deleting={deletingId === item.id}
               onUpdateQuantity={onUpdateQuantity}
+              onRequestDelete={onRequestDelete}
             />
           ))}
         </div>
@@ -710,7 +765,9 @@ function InventoryView({ alertItems, items, loading, updatingId, onRefresh, onUp
               key={item.id}
               item={item}
               updating={updatingId === item.id}
+              deleting={deletingId === item.id}
               onUpdateQuantity={onUpdateQuantity}
+              onRequestDelete={onRequestDelete}
             />
           ))}
         </div>
@@ -721,7 +778,7 @@ function InventoryView({ alertItems, items, loading, updatingId, onRefresh, onUp
   )
 }
 
-function InventoryCard({ item, updating, onUpdateQuantity }) {
+function InventoryCard({ item, updating, deleting, onUpdateQuantity, onRequestDelete }) {
   const status = item.status
   const nextMinus = Math.max(0, Number(item.quantity) - 1)
   const nextPlus = Number(item.quantity) + 1
@@ -787,6 +844,16 @@ function InventoryCard({ item, updating, onUpdateQuantity }) {
       </div>
 
       {item.memo && <p className="memo-text">{item.memo}</p>}
+
+      <button
+        className="delete-item-button"
+        type="button"
+        onClick={() => onRequestDelete(item)}
+        disabled={updating || deleting}
+      >
+        <Trash2 size={18} />
+        {deleting ? '削除中...' : '削除'}
+      </button>
     </article>
   )
 }

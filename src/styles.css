@@ -741,3 +741,66 @@ h1 {
     font-size: 0.96rem;
   }
 }
+
+.confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(12, 29, 24, 0.46);
+}
+
+.confirm-dialog {
+  display: grid;
+  width: min(100%, 420px);
+  gap: 14px;
+  border-radius: 8px;
+  padding: 20px;
+  background: #fff;
+  box-shadow: 0 24px 60px rgba(12, 29, 24, 0.28);
+}
+
+.confirm-dialog h2 {
+  color: var(--ink);
+  font-size: 1.12rem;
+}
+
+.confirm-dialog p {
+  color: var(--muted);
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.confirm-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.danger-button,
+.delete-item-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 8px;
+  font-weight: 900;
+}
+
+.danger-button {
+  min-height: 46px;
+  border: 0;
+  background: var(--red);
+  color: #fff;
+}
+
+.delete-item-button {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 12px;
+  border: 1px solid #f0b7b2;
+  background: #fff7f6;
+  color: var(--red);
+}
