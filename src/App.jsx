@@ -136,8 +136,8 @@ export default function App() {
       return
     }
 
-    if (!form.product_name.trim() || !form.product_code.trim() || !form.expiry_date) {
-      setError('商品名、商品コード、賞味期限を入力してください。')
+    if (!form.product_name.trim() || !form.expiry_date) {
+      setError('商品名、賞味期限を入力してください。')
       return
     }
 
@@ -760,16 +760,6 @@ function RegisterView({ form, ocrState, saving, onChange, onOcrBlob, onSubmit })
           </select>
         </label>
 
-        <label>
-          <span>商品コード</span>
-          <input
-            value={form.product_code}
-            onChange={(event) => onChange('product_code', event.target.value)}
-            placeholder="例：TEA-001"
-            autoComplete="off"
-            required
-          />
-        </label>
 
         <div className="form-row">
           <label>
@@ -921,7 +911,6 @@ function InventoryCard({ item, updating, deleting, editing, onUpdateQuantity, on
       <div className="card-topline">
         <div>
           <h3>{item.product_name}</h3>
-          <p>{item.product_code}</p>
         </div>
         <div className="badge-row">
           {status.labels.map((label) => (
@@ -1028,7 +1017,6 @@ function CsvView({ items, loading, onRefresh, onDownload }) {
 
       <div className="csv-preview" aria-label="CSVプレビュー">
         <div className="csv-row head">
-          <span>商品コード</span>
           <span>商品名</span>
           <span>現在在庫数</span>
           <span>更新在庫数</span>
@@ -1036,7 +1024,6 @@ function CsvView({ items, loading, onRefresh, onDownload }) {
         {previewItems.length ? (
           previewItems.map((item) => (
             <div className="csv-row" key={`csv-${item.id}`}>
-              <span>{item.product_code}</span>
               <span>{item.product_name}</span>
               <span>{item.quantity}</span>
               <span>{item.quantity}</span>

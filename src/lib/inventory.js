@@ -1,7 +1,6 @@
 export const AIR_REGI_UPDATE_TYPE = '棚卸し・在庫確認'
 
 export const CSV_HEADERS = [
-  '商品コード',
   '商品名',
   '現在在庫数',
   '更新在庫数',
@@ -78,7 +77,6 @@ export function sortInventory(items) {
 
 export function buildAirRegiCsv(items) {
   const rows = items.map((item) => [
-    item.product_code,
     item.product_name,
     item.quantity,
     item.quantity,
