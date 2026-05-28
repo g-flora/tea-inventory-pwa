@@ -345,12 +345,48 @@ function RegisterView({ form, ocrState, saving, onChange, onOcrBlob, onSubmit })
   const canvasRef = useRef(null)
   const streamRef = useRef(null)
   const [cameraActive, setCameraActive] = useState(false)
+  const [cameraReady, setCameraReady] = useState(false)
   const [cameraError, setCameraError] = useState('')
 
   useEffect(() => () => stopCameraStream(), [])
 
+  useEffect(() => {
+    if (!cameraActive || !streamRef.current || !videoRef.current) {
+      return undefined
+    }
+
+    let cancelled = false
+    const video = videoRef.current
+
+    async function startPreview() {
+      try {
+        setCameraReady(false)
+        video.srcObject = streamRef.current
+        video.muted = true
+        video.playsInline = true
+        await video.play()
+
+        if (!cancelled) {
+          setCameraReady(true)
+        }
+      } catch {
+        if (!cancelled) {
+          setCameraError('カメラ映像を表示できませんでした。閉じてもう一度試してください。')
+          stopCameraStream()
+        }
+      }
+    }
+
+    startPreview()
+
+    return () => {
+      cancelled = true
+    }
+  }, [cameraActive])
+
   async function openCamera() {
     setCameraError('')
+    setCameraReady(false)
 
     if (!navigator.mediaDevices?.getUserMedia) {
       setCameraError('この端末ではカメラを起動できません。HTTPS公開後にもう一度試してください。')
@@ -369,11 +405,6 @@ function RegisterView({ form, ocrState, saving, onChange, onOcrBlob, onSubmit })
 
       streamRef.current = stream
       setCameraActive(true)
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        await videoRef.current.play()
-      }
     } catch {
       setCameraError('カメラを起動できませんでした。ブラウザのカメラ許可を確認してください。')
       stopCameraStream()
@@ -385,9 +416,14 @@ function RegisterView({ form, ocrState, saving, onChange, onOcrBlob, onSubmit })
     const canvas = canvasRef.current
 
     if (!video || !canvas) return
+    if (!cameraReady || !video.videoWidth || !video.videoHeight) {
+      setCameraError('カメラ映像の準備中です。少し待ってから撮影してください。')
+      return
+    }
 
-    canvas.width = video.videoWidth || 1280
-    canvas.height = video.videoHeight || 720
+    setCameraError('')
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
     const context = canvas.getContext('2d')
     context.drawImage(video, 0, 0, canvas.width, canvas.height)
 
@@ -415,6 +451,7 @@ function RegisterView({ form, ocrState, saving, onChange, onOcrBlob, onSubmit })
     }
 
     setCameraActive(false)
+    setCameraReady(false)
   }
 
   return (
@@ -442,11 +479,11 @@ function RegisterView({ form, ocrState, saving, onChange, onOcrBlob, onSubmit })
           </button>
         ) : (
           <div className="camera-capture">
-            <video ref={videoRef} playsInline muted />
+            <video ref={videoRef} autoPlay playsInline muted />
             <div className="camera-actions">
-              <button className="primary-button" type="button" onClick={captureLabel}>
+              <button className="primary-button" type="button" onClick={captureLabel} disabled={!cameraReady}>
                 <Camera size={22} />
-                撮影して読み取り
+                {cameraReady ? '撮影して読み取り' : 'カメラ準備中'}
               </button>
               <button className="icon-text-button" type="button" onClick={stopCameraStream}>
                 閉じる
@@ -464,6 +501,7 @@ function RegisterView({ form, ocrState, saving, onChange, onOcrBlob, onSubmit })
         )}
 
         {cameraError && <p className="ocr-notice error">{cameraError}</p>}
+        {cameraActive && !cameraReady && !cameraError && <p className="ocr-notice">カメラ映像を準備中です。</p>}
         {ocrState.notice && <p className="ocr-notice">{ocrState.notice}</p>}
 
         {ocrState.text && (
