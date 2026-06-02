@@ -13,6 +13,7 @@ import {
   RefreshCcw,
   Save,
   Trash2,
+  Upload,
   WifiOff,
 } from 'lucide-react'
 import { createWorker, OEM } from 'tesseract.js'
@@ -551,6 +552,7 @@ export default function App() {
 function RegisterView({ form, ocrState, saving, onChange, onOcrBlob, onSubmit }) {
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
+  const fileInputRef = useRef(null)
   const streamRef = useRef(null)
   const [cameraActive, setCameraActive] = useState(false)
   const [cameraReady, setCameraReady] = useState(false)
@@ -650,6 +652,27 @@ function RegisterView({ form, ocrState, saving, onChange, onOcrBlob, onSubmit })
     }
   }
 
+
+  function openPhotoPicker() {
+    fileInputRef.current?.click()
+  }
+
+  async function handlePhotoFile(event) {
+    let temporaryFile = event.target.files?.[0] ?? null
+    event.target.value = ''
+
+    if (!temporaryFile) return
+
+    setCameraError('')
+    stopCameraStream()
+
+    try {
+      await onOcrBlob(temporaryFile)
+    } finally {
+      temporaryFile = null
+    }
+  }
+
   function stopCameraStream() {
     streamRef.current?.getTracks().forEach((track) => track.stop())
     streamRef.current = null
@@ -675,16 +698,35 @@ function RegisterView({ form, ocrState, saving, onChange, onOcrBlob, onSubmit })
           <p>画像は保存せず、商品名と賞味期限の読み取りだけに使います。</p>
         </div>
 
+        <input
+          ref={fileInputRef}
+          className="file-input-hidden"
+          type="file"
+          accept="image/*"
+          onChange={handlePhotoFile}
+        />
+
         {!cameraActive ? (
-          <button
-            className="camera-button"
-            type="button"
-            disabled={ocrState.busy}
-            onClick={openCamera}
-          >
-            <Camera size={22} />
-            {ocrState.busy ? '読み取り中...' : 'カメラを起動'}
-          </button>
+          <div className="ocr-action-grid">
+            <button
+              className="camera-button"
+              type="button"
+              disabled={ocrState.busy}
+              onClick={openCamera}
+            >
+              <Camera size={22} />
+              {ocrState.busy ? '\u8aad\u307f\u53d6\u308a\u4e2d...' : '\u30ab\u30e1\u30e9\u3092\u8d77\u52d5'}
+            </button>
+            <button
+              className="photo-button"
+              type="button"
+              disabled={ocrState.busy}
+              onClick={openPhotoPicker}
+            >
+              <Upload size={22} />
+              {'\u5199\u771f\u304b\u3089\u8aad\u307f\u53d6\u308b'}
+            </button>
+          </div>
         ) : (
           <div className="camera-capture">
             <video ref={videoRef} autoPlay playsInline muted />

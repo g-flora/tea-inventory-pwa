@@ -271,22 +271,48 @@ h1 {
   line-height: 1.5;
 }
 
-.camera-button {
+.ocr-action-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.camera-button,
+.photo-button {
   display: inline-flex;
   min-height: 56px;
   align-items: center;
   justify-content: center;
   gap: 9px;
-  border: 0;
   border-radius: 8px;
+  font-weight: 900;
+}
+
+.camera-button {
+  border: 0;
   background: var(--brand);
   color: #fff;
-  font-weight: 900;
+}
+
+.photo-button {
+  border: 1px solid #b8d3c7;
+  background: #fff;
+  color: var(--green);
+}
+
+.file-input-hidden {
+  display: none;
 }
 
 .camera-capture {
   display: grid;
   gap: 10px;
+}
+
+@media (min-width: 640px) {
+  .ocr-action-grid {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 .camera-capture video {
