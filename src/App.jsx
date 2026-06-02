@@ -49,7 +49,7 @@ const initialForm = () => ({
   product_code: '',
   arrival_date: todayText(),
   expiry_date: '',
-  quantity: 0,
+  quantity: '',
   reorder_level: 5,
   memo: '',
 })
@@ -137,7 +137,21 @@ export default function App() {
     }
 
     if (!form.product_name.trim() || !form.expiry_date) {
-      setError('商品名、賞味期限を入力してください。')
+      setError('\u5546\u54c1\u540d\u3001\u8cde\u5473\u671f\u9650\u3092\u5165\u529b\u3057\u3066\u304f\u3060\u3055\u3044\u3002')
+      return
+    }
+
+    const quantityText = String(form.quantity).trim()
+
+    if (quantityText === '') {
+      setError('在庫数を入力してください。')
+      return
+    }
+
+    const quantityValue = Number(quantityText)
+
+    if (Number.isNaN(quantityValue) || quantityValue < 0) {
+      setError('在庫数には0以上の数字を入力してください。')
       return
     }
 
@@ -148,7 +162,7 @@ export default function App() {
       product_code: form.product_code.trim(),
       arrival_date: form.arrival_date,
       expiry_date: form.expiry_date,
-      quantity: Number(form.quantity),
+      quantity: quantityValue,
       reorder_level: Number(form.reorder_level || 5),
       memo: form.memo.trim(),
     }
@@ -792,7 +806,6 @@ function RegisterView({ form, ocrState, saving, onChange, onOcrBlob, onSubmit })
               inputMode="numeric"
               value={form.quantity}
               onChange={(event) => onChange('quantity', event.target.value)}
-              required
             />
           </label>
 
