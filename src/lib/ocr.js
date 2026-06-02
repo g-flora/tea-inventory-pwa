@@ -46,7 +46,12 @@ export function getProductNameCandidatesFromOcr(text, productNames, limit = 3) {
 
 export function getExpiryDateCandidatesFromOcr(text, limit = 3) {
   const normalizedText = normalizeDateText(text)
-  const candidates = [...findDelimitedDates(normalizedText), ...findCompactDates(normalizedText), ...findLooseDateBlocks(normalizedText)]
+  const candidates = [
+    ...findExpiryLabelDates(normalizedText),
+    ...findDelimitedDates(normalizedText),
+    ...findCompactDates(normalizedText),
+    ...findLooseDateBlocks(normalizedText),
+  ]
   return unique(candidates).filter(Boolean).filter(isLikelyExpiryDate).slice(0, limit).map((value) => ({ value }))
 }
 
@@ -85,6 +90,18 @@ function mergeProductCandidates(candidates) {
   }
 
   return [...byName.values()]
+}
+
+
+function findExpiryLabelDates(text) {
+  const results = []
+  const pattern = /(?:\u8cde\u5473\u671f\u9650|\u671f\u9650|EXP|BB|BEST\s*BEFORE)\D{0,12}((?:20)?\d{2})\s*[\u5e74.\/\-?]\s*(\d{1,2})\s*[\u6708.\/\-?]\s*(\d{1,2})\s*\u65e5?/gi
+  let match = pattern.exec(text)
+  while (match) {
+    results.push(formatDateCandidate(match[1], match[2], match[3]))
+    match = pattern.exec(text)
+  }
+  return results
 }
 
 function findDelimitedDates(text) {
