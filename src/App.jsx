@@ -34,6 +34,7 @@ const OCR_PHOTO_BRIGHTNESS = 6
 const LOW_STOCK_THRESHOLD = 5
 const EXPIRY_WARNING_DAYS = 30
 const DAY_MS = 24 * 60 * 60 * 1000
+const BULK_OCR_MAX_FILES = 5
 
 const views = [
   { id: 'register', label: '入荷登録', icon: PackagePlus },
@@ -92,6 +93,37 @@ function isExpiryWithinWarning(expiryDate) {
 
   const daysUntilExpiry = Math.ceil((expiry.getTime() - today.getTime()) / DAY_MS)
   return daysUntilExpiry <= EXPIRY_WARNING_DAYS
+}
+
+function buildOcrResult(text) {
+  return {
+    text,
+    productCandidates: getProductNameCandidatesFromOcr(text, productNameOptions),
+    expiryDateCandidates: getExpiryDateCandidatesFromOcr(text),
+    matchedProductName: matchProductNameFromOcr(text, productNameOptions),
+    expiryDate: extractExpiryDateFromOcr(text),
+  }
+}
+
+async function recognizeOcrBlob(imageBlob, onProgress = () => {}) {
+  let worker = null
+
+  try {
+    worker = await createWorker(['jpn', 'eng'], OEM.LSTM_ONLY, {
+      logger: (log) => {
+        if (log.status === 'recognizing text' && typeof log.progress === 'number') {
+          onProgress(Math.round(log.progress * 100))
+        }
+      },
+    })
+
+    const result = await worker.recognize(imageBlob)
+    return buildOcrResult(result.data.text || '')
+  } finally {
+    if (worker) {
+      await worker.terminate().catch(() => {})
+    }
+  }
 }
 
 export default function App() {
@@ -240,42 +272,30 @@ export default function App() {
       busy: true,
       progress: 0,
       text: '',
-      notice: 'OCR処理中です。画像は保存しません。',
+      notice: '\u004f\u0043\u0052\u51e6\u7406\u4e2d\u3067\u3059\u3002\u753b\u50cf\u306f\u4fdd\u5b58\u3057\u307e\u305b\u3093\u3002',
       productCandidates: [],
       expiryDateCandidates: [],
     })
 
-    let worker = null
-
     try {
-      worker = await createWorker(['jpn', 'eng'], OEM.LSTM_ONLY, {
-        logger: (log) => {
-          if (log.status === 'recognizing text' && typeof log.progress === 'number') {
-            setOcrState((current) => ({
-              ...current,
-              progress: Math.round(log.progress * 100),
-            }))
-          }
-        },
+      const ocrResult = await recognizeOcrBlob(imageBlob, (progress) => {
+        setOcrState((current) => ({
+          ...current,
+          progress,
+        }))
       })
-
-      const result = await worker.recognize(imageBlob)
-      const text = result.data.text || ''
-      const productCandidates = getProductNameCandidatesFromOcr(text, productNameOptions)
-      const expiryDateCandidates = getExpiryDateCandidatesFromOcr(text)
-      const matchedProductName = matchProductNameFromOcr(text, productNameOptions)
-      const expiryDate = extractExpiryDateFromOcr(text)
+      const { text, productCandidates, expiryDateCandidates, matchedProductName, expiryDate } = ocrResult
       const applied = []
       const formUpdates = {}
 
       if (matchedProductName) {
         formUpdates.product_name = matchedProductName
-        applied.push('商品名')
+        applied.push('\u5546\u54c1\u540d')
       }
 
       if (expiryDate) {
         formUpdates.expiry_date = expiryDate
-        applied.push('賞味期限')
+        applied.push('\u8cde\u5473\u671f\u9650')
       }
 
       if (applied.length) {
@@ -289,24 +309,72 @@ export default function App() {
         productCandidates,
         expiryDateCandidates,
         notice: applied.length
-          ? `${applied.join('・')}を仮入力しました。確認してから登録してください。`
-          : '読み取りましたが自動入力できませんでした。手入力で修正してください。',
+          ? `${applied.join('\u30fb')}\u3092\u4eee\u5165\u529b\u3057\u307e\u3057\u305f\u3002\u78ba\u8a8d\u3057\u3066\u304b\u3089\u767b\u9332\u3057\u3066\u304f\u3060\u3055\u3044\u3002`
+          : '\u8aad\u307f\u53d6\u308a\u307e\u3057\u305f\u304c\u81ea\u52d5\u5165\u529b\u3067\u304d\u307e\u305b\u3093\u3067\u3057\u305f\u3002\u624b\u5165\u529b\u3067\u4fee\u6b63\u3057\u3066\u304f\u3060\u3055\u3044\u3002',
       })
     } catch (ocrError) {
       setOcrState({
         busy: false,
         progress: 0,
         text: '',
-        notice: 'OCRに失敗しました。手入力で登録できます。',
+        notice: '\u004f\u0043\u0052\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002\u624b\u5165\u529b\u3067\u767b\u9332\u3067\u304d\u307e\u3059\u3002',
         productCandidates: [],
         expiryDateCandidates: [],
       })
-      setError(ocrError instanceof Error ? ocrError.message : 'OCRに失敗しました。')
-    } finally {
-      if (worker) {
-        await worker.terminate().catch(() => {})
-      }
+      setError(ocrError instanceof Error ? ocrError.message : '\u004f\u0043\u0052\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002')
     }
+  }
+
+  async function registerOcrCandidate(candidateForm) {
+    setMessage('')
+    setError('')
+
+    if (!hasSupabaseConfig) {
+      setError('.env.local\u306bSupabase\u306e\u63a5\u7d9a\u60c5\u5831\u3092\u8a2d\u5b9a\u3057\u3066\u304f\u3060\u3055\u3044\u3002')
+      return false
+    }
+
+    const productName = String(candidateForm.product_name || '').trim()
+    const expiryDate = String(candidateForm.expiry_date || '').trim()
+    const quantityText = String(candidateForm.quantity ?? '').trim()
+
+    if (!productName || !expiryDate) {
+      setError('\u5546\u54c1\u540d\u3001\u8cde\u5473\u671f\u9650\u3092\u78ba\u8a8d\u3057\u3066\u304f\u3060\u3055\u3044\u3002')
+      return false
+    }
+
+    if (quantityText === '') {
+      setError('\u5728\u5eab\u6570\u3092\u5165\u529b\u3057\u3066\u304f\u3060\u3055\u3044\u3002')
+      return false
+    }
+
+    const quantityValue = Number(quantityText)
+
+    if (Number.isNaN(quantityValue) || quantityValue < 0) {
+      setError('\u5728\u5eab\u6570\u306b\u306f0\u4ee5\u4e0a\u306e\u6570\u5b57\u3092\u5165\u529b\u3057\u3066\u304f\u3060\u3055\u3044\u3002')
+      return false
+    }
+
+    const payload = {
+      product_name: productName,
+      product_code: '',
+      arrival_date: candidateForm.arrival_date || todayText(),
+      expiry_date: expiryDate,
+      quantity: quantityValue,
+      reorder_level: 5,
+      memo: '',
+    }
+
+    const { error: insertError } = await supabase.from(TABLE_NAME).insert(payload)
+
+    if (insertError) {
+      setError(insertError.message)
+      return false
+    }
+
+    setMessage('\u5165\u8377\u5019\u88dc\u3092\u767b\u9332\u3057\u307e\u3057\u305f\u3002')
+    await loadInventory()
+    return true
   }
 
   async function updateQuantity(item, nextQuantity) {
@@ -548,6 +616,7 @@ export default function App() {
             saving={saving}
             onChange={updateForm}
             onOcrBlob={handleOcrBlob}
+            onRegisterCandidate={registerOcrCandidate}
             onSubmit={handleSubmit}
           />
         )}
@@ -591,14 +660,24 @@ export default function App() {
   )
 }
 
-function RegisterView({ form, ocrState, saving, onChange, onOcrBlob, onSubmit }) {
+function RegisterView({ form, ocrState, saving, onChange, onOcrBlob, onRegisterCandidate, onSubmit }) {
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
   const fileInputRef = useRef(null)
+  const bulkFileInputRef = useRef(null)
   const streamRef = useRef(null)
   const [cameraActive, setCameraActive] = useState(false)
   const [cameraReady, setCameraReady] = useState(false)
   const [cameraError, setCameraError] = useState('')
+  const [bulkOcrState, setBulkOcrState] = useState({
+    busy: false,
+    current: 0,
+    total: 0,
+    progress: 0,
+    notice: '',
+  })
+  const [bulkCandidates, setBulkCandidates] = useState([])
+  const [registeringCandidateId, setRegisteringCandidateId] = useState(null)
 
   useEffect(() => () => stopCameraStream(), [])
 
@@ -699,6 +778,9 @@ function RegisterView({ form, ocrState, saving, onChange, onOcrBlob, onSubmit })
     fileInputRef.current?.click()
   }
 
+  function openBulkPhotoPicker() {
+    bulkFileInputRef.current?.click()
+  }
 
   async function preparePhotoForOcr(imageFile) {
     const canvas = canvasRef.current
@@ -779,6 +861,142 @@ function RegisterView({ form, ocrState, saving, onChange, onOcrBlob, onSubmit })
     }
   }
 
+  async function handleBulkPhotoFiles(event) {
+    const selectedFiles = Array.from(event.target.files ?? []).slice(0, BULK_OCR_MAX_FILES)
+    const originalCount = event.target.files?.length ?? 0
+    event.target.value = ''
+
+    if (!selectedFiles.length) return
+
+    setCameraError('')
+    stopCameraStream()
+    setBulkCandidates([])
+    setBulkOcrState({
+      busy: true,
+      current: 0,
+      total: selectedFiles.length,
+      progress: 0,
+      notice:
+        originalCount > BULK_OCR_MAX_FILES
+          ? `\u6700\u5927${BULK_OCR_MAX_FILES}\u679a\u307e\u3067\u8aad\u307f\u53d6\u308a\u307e\u3059\u3002\u5148\u982d${BULK_OCR_MAX_FILES}\u679a\u3092\u51e6\u7406\u3057\u307e\u3059\u3002`
+          : '\u8907\u6570\u5199\u771f\u3092\u9806\u756a\u306b\u8aad\u307f\u53d6\u308a\u307e\u3059\u3002',
+    })
+
+    for (let index = 0; index < selectedFiles.length; index += 1) {
+      let temporaryFile = selectedFiles[index]
+      let temporaryBlob = null
+
+      setBulkOcrState((current) => ({
+        ...current,
+        current: index + 1,
+        progress: 0,
+        notice: `${index + 1}/${selectedFiles.length}\u679a\u76ee\u3092\u8aad\u307f\u53d6\u308a\u4e2d\u3067\u3059\u3002`,
+      }))
+
+      try {
+        temporaryBlob = await preparePhotoForOcr(temporaryFile)
+        const ocrResult = await recognizeOcrBlob(temporaryBlob, (progress) => {
+          setBulkOcrState((current) => ({ ...current, progress }))
+        })
+
+        const productName = ocrResult.matchedProductName || ocrResult.productCandidates[0]?.name || ''
+        const expiryDate = ocrResult.expiryDate || ocrResult.expiryDateCandidates[0]?.value || ''
+
+        setBulkCandidates((current) => [
+          ...current,
+          {
+            id: `${Date.now()}-${index}`,
+            sourceLabel: `\u5199\u771f ${index + 1}`,
+            status: 'ready',
+            error: '',
+            productCandidates: ocrResult.productCandidates,
+            expiryDateCandidates: ocrResult.expiryDateCandidates,
+            text: ocrResult.text,
+            form: {
+              product_name: productName,
+              expiry_date: expiryDate,
+              quantity: '',
+              arrival_date: todayText(),
+            },
+          },
+        ])
+      } catch (ocrError) {
+        setBulkCandidates((current) => [
+          ...current,
+          {
+            id: `${Date.now()}-${index}`,
+            sourceLabel: `\u5199\u771f ${index + 1}`,
+            status: 'error',
+            error: ocrError instanceof Error ? ocrError.message : '\u004f\u0043\u0052\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002',
+            productCandidates: [],
+            expiryDateCandidates: [],
+            text: '',
+            form: {
+              product_name: '',
+              expiry_date: '',
+              quantity: '',
+              arrival_date: todayText(),
+            },
+          },
+        ])
+      } finally {
+        temporaryBlob = null
+        temporaryFile = null
+      }
+    }
+
+    setBulkOcrState((current) => ({
+      ...current,
+      busy: false,
+      progress: 100,
+      notice: '\u8aad\u307f\u53d6\u308a\u5019\u88dc\u3092\u4f5c\u6210\u3057\u307e\u3057\u305f\u3002\u5185\u5bb9\u3092\u78ba\u8a8d\u3057\u3066\u304b\u3089\u767b\u9332\u3057\u3066\u304f\u3060\u3055\u3044\u3002',
+    }))
+  }
+
+  function updateBulkCandidate(candidateId, field, value) {
+    setBulkCandidates((current) =>
+      current.map((candidate) =>
+        candidate.id === candidateId
+          ? {
+              ...candidate,
+              status: candidate.status === 'registered' ? candidate.status : 'ready',
+              form: {
+                ...candidate.form,
+                [field]: value,
+              },
+            }
+          : candidate,
+      ),
+    )
+  }
+
+  function removeBulkCandidate(candidateId) {
+    if (registeringCandidateId === candidateId) return
+    setBulkCandidates((current) => current.filter((candidate) => candidate.id !== candidateId))
+  }
+
+  async function registerBulkCandidate(candidate) {
+    if (registeringCandidateId || candidate.status === 'registered') return
+
+    setRegisteringCandidateId(candidate.id)
+    const registered = await onRegisterCandidate(candidate.form)
+
+    if (registered) {
+      setBulkCandidates((current) =>
+        current.map((entry) =>
+          entry.id === candidate.id
+            ? {
+                ...entry,
+                status: 'registered',
+              }
+            : entry,
+        ),
+      )
+    }
+
+    setRegisteringCandidateId(null)
+  }
+
   function stopCameraStream() {
     streamRef.current?.getTracks().forEach((track) => track.stop())
     streamRef.current = null
@@ -811,13 +1029,21 @@ function RegisterView({ form, ocrState, saving, onChange, onOcrBlob, onSubmit })
           accept="image/*"
           onChange={handlePhotoFile}
         />
+        <input
+          ref={bulkFileInputRef}
+          className="file-input-hidden"
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={handleBulkPhotoFiles}
+        />
 
         {!cameraActive ? (
           <div className="ocr-action-grid">
             <button
               className="camera-button"
               type="button"
-              disabled={ocrState.busy}
+              disabled={ocrState.busy || bulkOcrState.busy}
               onClick={openCamera}
             >
               <Camera size={22} />
@@ -826,11 +1052,20 @@ function RegisterView({ form, ocrState, saving, onChange, onOcrBlob, onSubmit })
             <button
               className="photo-button"
               type="button"
-              disabled={ocrState.busy}
+              disabled={ocrState.busy || bulkOcrState.busy}
               onClick={openPhotoPicker}
             >
               <Upload size={22} />
               {'\u5199\u771f\u304b\u3089\u8aad\u307f\u53d6\u308b'}
+            </button>
+            <button
+              className="photo-button"
+              type="button"
+              disabled={ocrState.busy || bulkOcrState.busy}
+              onClick={openBulkPhotoPicker}
+            >
+              <Upload size={22} />
+              {'\u5199\u771f\u304b\u3089\u4e00\u62ec\u8aad\u307f\u53d6\u308a'}
             </button>
           </div>
         ) : (
@@ -902,8 +1137,41 @@ function RegisterView({ form, ocrState, saving, onChange, onOcrBlob, onSubmit })
             <pre>{ocrState.text}</pre>
           </details>
         )}
-      </section>
 
+        {(bulkOcrState.busy || bulkOcrState.notice) && (
+          <div className="bulk-ocr-status">
+            <p>{bulkOcrState.notice}</p>
+            {bulkOcrState.busy && (
+              <div className="ocr-progress" aria-label="\u8907\u6570\u5199\u771fOCR\u9032\u884c\u72b6\u6cc1">
+                <span style={{ width: `${bulkOcrState.progress}%` }} />
+              </div>
+            )}
+            {bulkOcrState.busy && <small>{`${bulkOcrState.current}/${bulkOcrState.total}\u679a`}</small>}
+          </div>
+        )}
+
+        {bulkCandidates.length > 0 && (
+          <section className="bulk-ocr-panel" aria-label="\u5165\u8377\u767b\u9332\u5019\u88dc">
+            <div className="bulk-ocr-header">
+              <h3>{'\u5165\u8377\u767b\u9332\u5019\u88dc'}</h3>
+              <span>{`${bulkCandidates.length}\u4ef6`}</span>
+            </div>
+            <div className="bulk-candidate-list">
+              {bulkCandidates.map((candidate) => (
+                <BulkOcrCandidateCard
+                  key={candidate.id}
+                  candidate={candidate}
+                  registering={registeringCandidateId === candidate.id}
+                  onChange={updateBulkCandidate}
+                  onRegister={registerBulkCandidate}
+                  onRemove={removeBulkCandidate}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
+      </section>
       <form className="entry-form" onSubmit={onSubmit}>
         <label>
           <span>商品名</span>
@@ -988,6 +1256,130 @@ function RegisterView({ form, ocrState, saving, onChange, onOcrBlob, onSubmit })
   )
 }
 
+function BulkOcrCandidateCard({ candidate, registering, onChange, onRegister, onRemove }) {
+  const isRegistered = candidate.status === 'registered'
+  const isError = candidate.status === 'error'
+  const statusText = isRegistered ? '\u767b\u9332\u6e08\u307f' : isError ? '\u8aad\u307f\u53d6\u308a\u5931\u6557' : '\u78ba\u8a8d\u5f85\u3061'
+
+  return (
+    <article className={`bulk-candidate-card ${candidate.status}`}>
+      <div className="bulk-candidate-topline">
+        <div>
+          <h4>{candidate.sourceLabel}</h4>
+          <p>{'\u5165\u8377\u65e5\uff1a'}{candidate.form.arrival_date}</p>
+        </div>
+        <span className={`candidate-status ${candidate.status}`}>{statusText}</span>
+      </div>
+
+      {candidate.error && <p className="candidate-error">{candidate.error}</p>}
+
+      <div className="candidate-grid">
+        <label>
+          <span>{'\u5546\u54c1\u540d'}</span>
+          <select
+            value={candidate.form.product_name}
+            onChange={(event) => onChange(candidate.id, 'product_name', event.target.value)}
+            disabled={isRegistered || registering}
+          >
+            <option value="">{'\u5546\u54c1\u540d\u3092\u9078\u629e'}</option>
+            {productNameOptions.map((productName) => (
+              <option key={productName} value={productName}>
+                {productName}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          <span>{'\u8cde\u5473\u671f\u9650'}</span>
+          <input
+            type="date"
+            value={candidate.form.expiry_date}
+            onChange={(event) => onChange(candidate.id, 'expiry_date', event.target.value)}
+            disabled={isRegistered || registering}
+          />
+        </label>
+
+        <label>
+          <span>{'\u5728\u5eab\u6570'}</span>
+          <input
+            type="number"
+            min="0"
+            inputMode="numeric"
+            value={candidate.form.quantity}
+            onChange={(event) => onChange(candidate.id, 'quantity', event.target.value)}
+            disabled={isRegistered || registering}
+          />
+        </label>
+      </div>
+
+      <div className="candidate-chip-list">
+        <span>{'\u5546\u54c1\u540d\u5019\u88dc'}</span>
+        {candidate.productCandidates.length ? (
+          candidate.productCandidates.map((product) => (
+            <button
+              className="candidate-chip"
+              type="button"
+              key={product.name}
+              onClick={() => onChange(candidate.id, 'product_name', product.name)}
+              disabled={isRegistered || registering}
+            >
+              {product.name}
+            </button>
+          ))
+        ) : (
+          <small>{'\u5019\u88dc\u306a\u3057'}</small>
+        )}
+      </div>
+
+      <div className="candidate-chip-list">
+        <span>{'\u8cde\u5473\u671f\u9650\u5019\u88dc'}</span>
+        {candidate.expiryDateCandidates.length ? (
+          candidate.expiryDateCandidates.map((expiry) => (
+            <button
+              className="candidate-chip"
+              type="button"
+              key={expiry.value}
+              onClick={() => onChange(candidate.id, 'expiry_date', expiry.value)}
+              disabled={isRegistered || registering}
+            >
+              {expiry.value}
+            </button>
+          ))
+        ) : (
+          <small>{'\u5019\u88dc\u306a\u3057'}</small>
+        )}
+      </div>
+
+      {candidate.text && (
+        <details className="candidate-ocr-text">
+          <summary>{'\u8aad\u307f\u53d6\u308a\u6587\u5b57\u3092\u78ba\u8a8d'}</summary>
+          <pre>{candidate.text}</pre>
+        </details>
+      )}
+
+      <div className="candidate-actions">
+        <button
+          className="primary-button"
+          type="button"
+          onClick={() => onRegister(candidate)}
+          disabled={isRegistered || registering || isError}
+        >
+          {registering ? '\u767b\u9332\u4e2d...' : isRegistered ? '\u767b\u9332\u6e08\u307f' : '\u767b\u9332'}
+        </button>
+        <button
+          className="delete-item-button"
+          type="button"
+          onClick={() => onRemove(candidate.id)}
+          disabled={registering}
+        >
+          <Trash2 size={18} />
+          {'\u524a\u9664'}
+        </button>
+      </div>
+    </article>
+  )
+}
 function InventoryView({
   lowStockProducts,
   expiringItems,

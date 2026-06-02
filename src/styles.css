@@ -311,7 +311,7 @@ h1 {
 
 @media (min-width: 640px) {
   .ocr-action-grid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -390,6 +390,190 @@ h1 {
   color: var(--ink);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.bulk-ocr-status {
+  display: grid;
+  gap: 8px;
+  border-radius: 8px;
+  padding: 11px 12px;
+  background: #eef8f4;
+  color: var(--brand);
+  font-weight: 800;
+}
+
+.bulk-ocr-status p {
+  color: var(--brand);
+}
+
+.bulk-ocr-status small {
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.bulk-ocr-panel {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.bulk-ocr-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.bulk-ocr-header h3 {
+  color: var(--brand);
+  font-size: 1.08rem;
+}
+
+.bulk-ocr-header span {
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.bulk-candidate-list {
+  display: grid;
+  gap: 12px;
+}
+
+.bulk-candidate-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-left: 6px solid var(--brand-2);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fff;
+}
+
+.bulk-candidate-card.registered {
+  border-left-color: var(--brand);
+  background: #f1faf5;
+}
+
+.bulk-candidate-card.error {
+  border-left-color: var(--red);
+  background: var(--red-bg);
+}
+
+.bulk-candidate-topline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.bulk-candidate-topline h4 {
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.bulk-candidate-topline p {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.candidate-status {
+  flex-shrink: 0;
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: var(--blue-bg);
+  color: var(--blue);
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.candidate-status.registered {
+  background: #dff4e8;
+  color: var(--brand);
+}
+
+.candidate-status.error {
+  background: #ffd8d5;
+  color: var(--red);
+}
+
+.candidate-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.candidate-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.candidate-chip-list > span {
+  width: 100%;
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 900;
+}
+
+.candidate-chip-list small {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.candidate-chip {
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 11px;
+  background: #fff;
+  color: var(--brand);
+  font-weight: 900;
+}
+
+.candidate-ocr-text {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.candidate-ocr-text summary {
+  color: var(--brand);
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.candidate-ocr-text pre {
+  max-height: 130px;
+  overflow: auto;
+  margin: 8px 0 0;
+  border-radius: 8px;
+  padding: 10px;
+  background: #f8fbf9;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.candidate-error {
+  border-radius: 8px;
+  padding: 10px;
+  background: #fff;
+  color: var(--red);
+  font-weight: 800;
+}
+
+.candidate-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.candidate-actions .primary-button {
+  margin-top: 0;
+}
+
+.candidate-actions .delete-item-button {
+  justify-content: center;
 }
 
 .entry-form label {
@@ -862,6 +1046,13 @@ h1 {
     min-height: 54px;
     flex-direction: row;
     font-size: 0.96rem;
+  }
+}
+
+
+@media (min-width: 760px) {
+  .candidate-grid {
+    grid-template-columns: 1fr 1fr 150px;
   }
 }
 
