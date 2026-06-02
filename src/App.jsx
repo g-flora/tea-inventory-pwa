@@ -31,6 +31,9 @@ const OCR_PHOTO_MAX_SIDE = 2000
 const OCR_PHOTO_TARGET_SIDE = 1800
 const OCR_PHOTO_CONTRAST = 1.08
 const OCR_PHOTO_BRIGHTNESS = 6
+const LOW_STOCK_THRESHOLD = 5
+const EXPIRY_WARNING_DAYS = 30
+const DAY_MS = 24 * 60 * 60 * 1000
 
 const views = [
   { id: 'register', label: '入荷登録', icon: PackagePlus },
@@ -58,6 +61,38 @@ const initialForm = () => ({
   reorder_level: 5,
   memo: '',
 })
+
+function getLowStockProducts(items) {
+  const totals = new Map()
+
+  for (const item of items) {
+    const productName = item.product_name || '\u5546\u54c1\u540d\u672a\u8a2d\u5b9a'
+    const current = totals.get(productName) ?? {
+      product_name: productName,
+      totalQuantity: 0,
+    }
+    const quantity = Number(item.quantity ?? 0)
+
+    current.totalQuantity += Number.isFinite(quantity) ? quantity : 0
+    totals.set(productName, current)
+  }
+
+  return [...totals.values()]
+    .filter((product) => product.totalQuantity <= LOW_STOCK_THRESHOLD)
+    .sort((a, b) => a.product_name.localeCompare(b.product_name, 'ja'))
+}
+
+function isExpiryWithinWarning(expiryDate) {
+  if (!expiryDate) return false
+
+  const today = new Date(`${todayText()}T00:00:00`)
+  const expiry = new Date(`${expiryDate}T00:00:00`)
+
+  if (Number.isNaN(expiry.getTime())) return false
+
+  const daysUntilExpiry = Math.ceil((expiry.getTime() - today.getTime()) / DAY_MS)
+  return daysUntilExpiry <= EXPIRY_WARNING_DAYS
+}
 
 export default function App() {
   const [activeView, setActiveView] = useState('register')
@@ -120,11 +155,13 @@ export default function App() {
     [inventory],
   )
 
-  const alertItems = enrichedInventory.filter((item) => item.status.isAlert)
-  const expiringCount = enrichedInventory.filter((item) =>
-    item.status.labels.includes('賞味期限注意'),
-  ).length
-  const lowStockCount = enrichedInventory.filter((item) => item.status.labels.includes('在庫少')).length
+  const lowStockProducts = useMemo(() => getLowStockProducts(enrichedInventory), [enrichedInventory])
+  const expiringItems = useMemo(
+    () => enrichedInventory.filter((item) => isExpiryWithinWarning(item.expiry_date)),
+    [enrichedInventory],
+  )
+  const expiringCount = expiringItems.length
+  const lowStockCount = lowStockProducts.length
   const totalQuantity = enrichedInventory.reduce((sum, item) => sum + Number(item.quantity ?? 0), 0)
 
   function updateForm(field, value) {
@@ -517,7 +554,8 @@ export default function App() {
 
         {activeView === 'list' && (
           <InventoryView
-            alertItems={alertItems}
+            lowStockProducts={lowStockProducts}
+            expiringItems={expiringItems}
             items={enrichedInventory}
             loading={loading}
             updatingId={updatingId}
@@ -951,7 +989,8 @@ function RegisterView({ form, ocrState, saving, onChange, onOcrBlob, onSubmit })
 }
 
 function InventoryView({
-  alertItems,
+  lowStockProducts,
+  expiringItems,
   items,
   loading,
   updatingId,
@@ -962,46 +1001,65 @@ function InventoryView({
   onRequestEdit,
   onRequestDelete,
 }) {
+  const actionCount = lowStockProducts.length + expiringItems.length
+
   return (
     <section className="screen-panel">
       <div className="section-heading with-action">
         <div>
           <div className="heading-line">
             <AlertTriangle size={24} />
-            <h2>警告一覧</h2>
+            <h2>{'\u8981\u5bfe\u5fdc\u4e00\u89a7'}</h2>
           </div>
-          <p>{alertItems.length ? `${alertItems.length}件の確認が必要です` : '警告はありません'}</p>
+          <p>{actionCount ? `${actionCount}\u4ef6\u306e\u78ba\u8a8d\u304c\u5fc5\u8981\u3067\u3059` : '\u8981\u5bfe\u5fdc\u306e\u5728\u5eab\u306f\u3042\u308a\u307e\u305b\u3093'}</p>
         </div>
         <button className="icon-text-button" type="button" onClick={onRefresh} disabled={loading}>
           <RefreshCcw size={20} />
-          更新
+          {'\u66f4\u65b0'}
         </button>
       </div>
 
-      {alertItems.length > 0 && (
-        <div className="inventory-list compact">
-          {alertItems.map((item) => (
-            <InventoryCard
-              key={`alert-${item.id}`}
-              item={item}
-              updating={updatingId === item.id}
-              deleting={deletingId === item.id}
-              editing={editingId === item.id}
-              onUpdateQuantity={onUpdateQuantity}
-              onRequestEdit={onRequestEdit}
-              onRequestDelete={onRequestDelete}
-            />
+      <div className="action-list-panel">
+        <ActionGroup
+          title={'\u5728\u5eab\u4e0d\u8db3'}
+          count={lowStockProducts.length}
+          emptyText={'\u5728\u5eab\u4e0d\u8db3\u306e\u5546\u54c1\u306f\u3042\u308a\u307e\u305b\u3093'}
+        >
+          {lowStockProducts.map((product) => (
+            <div className="action-row stock" key={product.product_name}>
+              <div>
+                <strong>{product.product_name}</strong>
+                <span>{`\u5408\u8a08\u5728\u5eab\uff1a${product.totalQuantity}\u500b`}</span>
+              </div>
+              <span className="action-chip">{`\u76ee\u5b89\uff1a${LOW_STOCK_THRESHOLD}\u500b\u4ee5\u4e0b`}</span>
+            </div>
           ))}
-        </div>
-      )}
+        </ActionGroup>
+
+        <ActionGroup
+          title={'\u671f\u9650\u8fd1\u3044'}
+          count={expiringItems.length}
+          emptyText={'\u671f\u9650\u8fd1\u3044\u5728\u5eab\u306f\u3042\u308a\u307e\u305b\u3093'}
+        >
+          {expiringItems.map((item) => (
+            <div className="action-row expiring" key={`expiry-${item.id}`}>
+              <div>
+                <strong>{item.product_name}</strong>
+                <span>{`\u8cde\u5473\u671f\u9650\uff1a${item.expiry_date}`}</span>
+              </div>
+              <span className="action-chip">{`\u5728\u5eab\uff1a${item.quantity}\u500b`}</span>
+            </div>
+          ))}
+        </ActionGroup>
+      </div>
 
       <div className="section-heading inventory-heading">
         <List size={24} />
-        <h2>在庫一覧</h2>
+        <h2>{'\u5728\u5eab\u4e00\u89a7'}</h2>
       </div>
 
       {loading ? (
-        <div className="empty-state">読み込み中...</div>
+        <div className="empty-state">{'\u8aad\u307f\u8fbc\u307f\u4e2d...'}</div>
       ) : items.length ? (
         <div className="inventory-list">
           {items.map((item) => (
@@ -1018,12 +1076,23 @@ function InventoryView({
           ))}
         </div>
       ) : (
-        <div className="empty-state">在庫データがありません</div>
+        <div className="empty-state">{'\u5728\u5eab\u30c7\u30fc\u30bf\u304c\u3042\u308a\u307e\u305b\u3093'}</div>
       )}
     </section>
   )
 }
 
+function ActionGroup({ title, count, emptyText, children }) {
+  return (
+    <section className="action-group">
+      <div className="action-group-header">
+        <h3>{title}</h3>
+        <span>{count}{'\u4ef6'}</span>
+      </div>
+      {count ? <div className="action-list">{children}</div> : <p className="action-empty">{emptyText}</p>}
+    </section>
+  )
+}
 function InventoryCard({ item, updating, deleting, editing, onUpdateQuantity, onRequestEdit, onRequestDelete }) {
   const status = item.status
   const nextMinus = Math.max(0, Number(item.quantity) - 1)
