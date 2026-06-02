@@ -27,6 +27,10 @@ import {
 } from './lib/ocr'
 
 const TABLE_NAME = 'tea_inventory'
+const OCR_PHOTO_MAX_SIDE = 2000
+const OCR_PHOTO_TARGET_SIDE = 1800
+const OCR_PHOTO_CONTRAST = 1.08
+const OCR_PHOTO_BRIGHTNESS = 6
 
 const views = [
   { id: 'register', label: '入荷登録', icon: PackagePlus },
@@ -657,6 +661,66 @@ function RegisterView({ form, ocrState, saving, onChange, onOcrBlob, onSubmit })
     fileInputRef.current?.click()
   }
 
+
+  async function preparePhotoForOcr(imageFile) {
+    const canvas = canvasRef.current
+    if (!canvas || typeof createImageBitmap !== 'function') return imageFile
+
+    let bitmap = null
+
+    try {
+      bitmap = await createImageBitmap(imageFile, { imageOrientation: 'from-image' })
+    } catch {
+      bitmap = await createImageBitmap(imageFile)
+    }
+
+    try {
+      const longestSide = Math.max(bitmap.width, bitmap.height)
+      const scale = longestSide > OCR_PHOTO_MAX_SIDE ? OCR_PHOTO_TARGET_SIDE / longestSide : 1
+      const width = Math.max(1, Math.round(bitmap.width * scale))
+      const height = Math.max(1, Math.round(bitmap.height * scale))
+      const context = canvas.getContext('2d')
+
+      if (!context) return imageFile
+
+      canvas.width = width
+      canvas.height = height
+      context.drawImage(bitmap, 0, 0, width, height)
+      enhancePhotoForOcr(context, width, height)
+
+      const preparedBlob = await new Promise((resolve) => {
+        canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.92)
+      })
+
+      return preparedBlob ?? imageFile
+    } finally {
+      canvas.width = 0
+      canvas.height = 0
+      bitmap?.close?.()
+    }
+  }
+
+  function enhancePhotoForOcr(context, width, height) {
+    try {
+      const imageData = context.getImageData(0, 0, width, height)
+      const data = imageData.data
+
+      for (let index = 0; index < data.length; index += 4) {
+        data[index] = clampOcrChannel((data[index] - 128) * OCR_PHOTO_CONTRAST + 128 + OCR_PHOTO_BRIGHTNESS)
+        data[index + 1] = clampOcrChannel((data[index + 1] - 128) * OCR_PHOTO_CONTRAST + 128 + OCR_PHOTO_BRIGHTNESS)
+        data[index + 2] = clampOcrChannel((data[index + 2] - 128) * OCR_PHOTO_CONTRAST + 128 + OCR_PHOTO_BRIGHTNESS)
+      }
+
+      context.putImageData(imageData, 0, 0)
+    } catch {
+      // Some browsers may block pixel access for unusual image sources; OCR can still use the drawn image.
+    }
+  }
+
+  function clampOcrChannel(value) {
+    return Math.max(0, Math.min(255, Math.round(value)))
+  }
+
   async function handlePhotoFile(event) {
     let temporaryFile = event.target.files?.[0] ?? null
     event.target.value = ''
@@ -666,9 +730,13 @@ function RegisterView({ form, ocrState, saving, onChange, onOcrBlob, onSubmit })
     setCameraError('')
     stopCameraStream()
 
+    let temporaryBlob = null
+
     try {
-      await onOcrBlob(temporaryFile)
+      temporaryBlob = await preparePhotoForOcr(temporaryFile)
+      await onOcrBlob(temporaryBlob)
     } finally {
+      temporaryBlob = null
       temporaryFile = null
     }
   }
