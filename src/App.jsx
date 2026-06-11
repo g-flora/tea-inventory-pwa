@@ -53,6 +53,8 @@ const productNameOptions = [
   '深蒸しほうじ茶ティーバッグ20入',
 ]
 
+const productNameOrder = new Map(productNameOptions.map((name, index) => [name, index]))
+
 const initialForm = () => ({
   product_name: '',
   product_code: '',
@@ -149,13 +151,25 @@ function getInventoryStatusForUi(item) {
   }
 }
 
+function getProductNameOrder(productName) {
+  return productNameOrder.get(productName ?? '') ?? productNameOptions.length
+}
+
 function sortInventoryForUi(items) {
   return [...items].sort((a, b) => {
-    if (a.status.rank !== b.status.rank) return a.status.rank - b.status.rank
-    if ((a.expiry_date ?? '') !== (b.expiry_date ?? '')) {
-      return (a.expiry_date ?? '').localeCompare(b.expiry_date ?? '')
-    }
-    return (a.product_name ?? '').localeCompare(b.product_name ?? '', 'ja')
+    const productOrderDiff = getProductNameOrder(a.product_name) - getProductNameOrder(b.product_name)
+    if (productOrderDiff !== 0) return productOrderDiff
+
+    const productNameDiff = (a.product_name ?? '').localeCompare(b.product_name ?? '', 'ja')
+    if (productNameDiff !== 0) return productNameDiff
+
+    const expiryDiff = (a.expiry_date ?? '').localeCompare(b.expiry_date ?? '')
+    if (expiryDiff !== 0) return expiryDiff
+
+    const arrivalDiff = (a.arrival_date ?? '').localeCompare(b.arrival_date ?? '')
+    if (arrivalDiff !== 0) return arrivalDiff
+
+    return String(a.id ?? '').localeCompare(String(b.id ?? ''))
   })
 }
 
