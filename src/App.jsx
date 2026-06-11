@@ -262,14 +262,14 @@ export default function App() {
 
   const enrichedInventory = useMemo(
     () =>
-      sortInventoryForUi(
-        inventory.map((item) => ({
-          ...item,
-          status: getInventoryStatusForUi(item),
-        })),
-      ),
+      inventory.map((item) => ({
+        ...item,
+        status: getInventoryStatusForUi(item),
+      })),
     [inventory],
   )
+
+  const sortedInventoryItems = useMemo(() => sortInventoryForUi(enrichedInventory), [enrichedInventory])
 
   const lowStockProducts = useMemo(() => getLowStockProducts(enrichedInventory), [enrichedInventory])
   const expiringItems = useMemo(
@@ -709,7 +709,7 @@ export default function App() {
           <InventoryView
             lowStockProducts={lowStockProducts}
             expiringItems={expiringItems}
-            items={enrichedInventory}
+            items={sortedInventoryItems}
             loading={loading}
             updatingId={updatingId}
             deletingId={deletingId}
