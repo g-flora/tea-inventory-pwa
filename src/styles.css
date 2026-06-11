@@ -775,9 +775,9 @@ h1 {
 
 .inventory-card {
   border: 1px solid var(--line);
-  border-left: 7px solid var(--brand-2);
+  border-left: 6px solid var(--brand-2);
   border-radius: 8px;
-  padding: 14px;
+  padding: 10px 12px;
   background: #fff;
 }
 
@@ -801,13 +801,13 @@ h1 {
 
 .card-topline {
   display: grid;
-  gap: 10px;
+  gap: 6px;
 }
 
 .card-topline h3 {
   color: var(--ink);
-  font-size: 1.15rem;
-  line-height: 1.35;
+  font-size: 1.08rem;
+  line-height: 1.28;
 }
 
 .product-expiry-line {
@@ -825,7 +825,7 @@ h1 {
 
 .product-expiry-line span {
   color: var(--muted);
-  font-size: 0.98rem;
+  font-size: 0.92rem;
   font-weight: 900;
   white-space: nowrap;
 }
@@ -878,7 +878,7 @@ h1 {
 
 .compact-detail-grid {
   grid-template-columns: 1fr;
-  margin: 10px 0 12px;
+  margin: 6px 0 8px;
 }
 
 .detail-grid div {
@@ -900,14 +900,14 @@ h1 {
 
 .quantity-control {
   display: grid;
-  grid-template-columns: 58px 1fr 58px;
+  grid-template-columns: 46px 1fr 46px;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .step-button {
-  width: 58px;
-  height: 54px;
+  width: 46px;
+  height: 42px;
   border: 1px solid #cdd9d2;
   background: #fff;
   color: var(--brand);
@@ -915,17 +915,17 @@ h1 {
 
 .quantity-display {
   display: flex;
-  min-height: 54px;
+  min-height: 42px;
   align-items: baseline;
   justify-content: center;
-  gap: 6px;
+  gap: 5px;
   border: 1px solid #cdd9d2;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.78);
 }
 
 .quantity-display span {
-  font-size: 1.75rem;
+  font-size: 1.45rem;
   font-weight: 950;
 }
 
@@ -1175,32 +1175,48 @@ h1 {
 }
 
 .card-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 .edit-item-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  min-height: 48px;
+  gap: 4px;
+  min-height: 32px;
+  padding: 0 9px;
   border: 1px solid #b8d3c7;
   border-radius: 8px;
   background: #f0fbf6;
   color: var(--green);
+  font-size: 0.78rem;
   font-weight: 900;
 }
 
 .card-actions .delete-item-button {
+  width: auto;
+  min-height: 32px;
   margin-top: 0;
+  padding: 0 9px;
+  gap: 4px;
+  font-size: 0.78rem;
+}
+
+.card-actions svg {
+  width: 14px;
+  height: 14px;
 }
 
 @media (max-width: 420px) {
-  .confirm-actions,
-  .card-actions {
+  .confirm-actions {
     grid-template-columns: 1fr;
   }
+
+  .card-actions {
+    justify-content: flex-end;
+  }
 }
+
