@@ -18,7 +18,7 @@ import {
 } from 'lucide-react'
 import { createWorker, OEM } from 'tesseract.js'
 import { hasSupabaseConfig, supabase } from './lib/supabaseClient'
-import { buildAirRegiCsv, getInventoryStatus, sortInventory, todayText } from './lib/inventory'
+import { buildAirRegiCsv, todayText } from './lib/inventory'
 import {
   extractExpiryDateFromOcr,
   getExpiryDateCandidatesFromOcr,
@@ -31,7 +31,7 @@ const OCR_PHOTO_MAX_SIDE = 2000
 const OCR_PHOTO_TARGET_SIDE = 1800
 const OCR_PHOTO_CONTRAST = 1.08
 const OCR_PHOTO_BRIGHTNESS = 6
-const LOW_STOCK_THRESHOLD = 5
+const LOW_STOCK_THRESHOLD = 4
 const EXPIRY_WARNING_DAYS = 30
 const DAY_MS = 24 * 60 * 60 * 1000
 const BULK_OCR_MAX_FILES = 5
@@ -59,7 +59,7 @@ const initialForm = () => ({
   arrival_date: todayText(),
   expiry_date: '',
   quantity: '',
-  reorder_level: 5,
+  reorder_level: LOW_STOCK_THRESHOLD,
   memo: '',
 })
 
@@ -83,16 +83,84 @@ function getLowStockProducts(items) {
     .sort((a, b) => a.product_name.localeCompare(b.product_name, 'ja'))
 }
 
-function isExpiryWithinWarning(expiryDate) {
-  if (!expiryDate) return false
+function daysUntilDateForUi(dateText) {
+  if (!dateText) return Number.POSITIVE_INFINITY
 
   const today = new Date(`${todayText()}T00:00:00`)
-  const expiry = new Date(`${expiryDate}T00:00:00`)
+  const target = new Date(`${dateText}T00:00:00`)
 
-  if (Number.isNaN(expiry.getTime())) return false
+  if (Number.isNaN(target.getTime())) return Number.POSITIVE_INFINITY
 
-  const daysUntilExpiry = Math.ceil((expiry.getTime() - today.getTime()) / DAY_MS)
-  return daysUntilExpiry <= EXPIRY_WARNING_DAYS
+  return Math.ceil((target.getTime() - today.getTime()) / DAY_MS)
+}
+
+function buildExpiryDetailForUi(remainingDays) {
+  if (remainingDays < 0) return `\u671f\u9650\u5207\u308c ${Math.abs(remainingDays)} \u65e5`
+  if (remainingDays === 0) return '\u672c\u65e5\u304c\u671f\u9650'
+  return `\u671f\u9650\u307e\u3067 ${remainingDays} \u65e5`
+}
+
+function buildNormalDetailForUi(remainingDays) {
+  if (!Number.isFinite(remainingDays)) return '\u8cde\u5473\u671f\u9650\u3092\u78ba\u8a8d\u3057\u3066\u304f\u3060\u3055\u3044'
+  return `\u8cde\u5473\u671f\u9650\u307e\u3067 ${remainingDays} \u65e5`
+}
+
+function getInventoryStatusForUi(item) {
+  const remainingDays = daysUntilDateForUi(item.expiry_date)
+  const isExpiring = remainingDays <= EXPIRY_WARNING_DAYS
+  const isLowStock = Number(item.quantity ?? 0) <= LOW_STOCK_THRESHOLD
+
+  if (isExpiring && isLowStock) {
+    return {
+      tone: 'danger',
+      rank: 0,
+      labels: ['\u8cde\u5473\u671f\u9650\u6ce8\u610f', '\u5728\u5eab\u5c11'],
+      detail: buildExpiryDetailForUi(remainingDays),
+      isAlert: true,
+    }
+  }
+
+  if (isExpiring) {
+    return {
+      tone: 'warning',
+      rank: 1,
+      labels: ['\u8cde\u5473\u671f\u9650\u6ce8\u610f'],
+      detail: buildExpiryDetailForUi(remainingDays),
+      isAlert: true,
+    }
+  }
+
+  if (isLowStock) {
+    return {
+      tone: 'stock',
+      rank: 2,
+      labels: ['\u5728\u5eab\u5c11'],
+      detail: `\u57fa\u6e96 ${LOW_STOCK_THRESHOLD} \u500b\u4ee5\u4e0b`,
+      isAlert: true,
+    }
+  }
+
+  return {
+    tone: 'ok',
+    rank: 3,
+    labels: ['\u901a\u5e38'],
+    detail: buildNormalDetailForUi(remainingDays),
+    isAlert: false,
+  }
+}
+
+function sortInventoryForUi(items) {
+  return [...items].sort((a, b) => {
+    if (a.status.rank !== b.status.rank) return a.status.rank - b.status.rank
+    if ((a.expiry_date ?? '') !== (b.expiry_date ?? '')) {
+      return (a.expiry_date ?? '').localeCompare(b.expiry_date ?? '')
+    }
+    return (a.product_name ?? '').localeCompare(b.product_name ?? '', 'ja')
+  })
+}
+
+function isExpiryWithinWarning(expiryDate) {
+  return daysUntilDateForUi(expiryDate) <= EXPIRY_WARNING_DAYS
 }
 
 function buildOcrResult(text) {
@@ -180,10 +248,12 @@ export default function App() {
 
   const enrichedInventory = useMemo(
     () =>
-      sortInventory(inventory).map((item) => ({
-        ...item,
-        status: getInventoryStatus(item),
-      })),
+      sortInventoryForUi(
+        inventory.map((item) => ({
+          ...item,
+          status: getInventoryStatusForUi(item),
+        })),
+      ),
     [inventory],
   )
 
@@ -237,7 +307,7 @@ export default function App() {
       arrival_date: form.arrival_date,
       expiry_date: form.expiry_date,
       quantity: quantityValue,
-      reorder_level: Number(form.reorder_level || 5),
+      reorder_level: Number(form.reorder_level || LOW_STOCK_THRESHOLD),
       memo: form.memo.trim(),
     }
 
@@ -361,7 +431,7 @@ export default function App() {
       arrival_date: candidateForm.arrival_date || todayText(),
       expiry_date: expiryDate,
       quantity: quantityValue,
-      reorder_level: 5,
+      reorder_level: LOW_STOCK_THRESHOLD,
       memo: '',
     }
 
