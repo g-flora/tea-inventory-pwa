@@ -1563,8 +1563,9 @@ function InventoryCard({ item, updating, deleting, editing, onUpdateQuantity, on
   return (
     <article className={`inventory-card ${status.tone}`}>
       <div className="card-topline">
-        <div>
+        <div className="product-expiry-line">
           <h3>{item.product_name}</h3>
+          <span>{item.expiry_date}</span>
         </div>
         <div className="badge-row">
           {status.labels.map((label) => (
@@ -1575,22 +1576,10 @@ function InventoryCard({ item, updating, deleting, editing, onUpdateQuantity, on
         </div>
       </div>
 
-      <dl className="detail-grid">
+      <dl className="detail-grid compact-detail-grid">
         <div>
           <dt>入荷日</dt>
           <dd>{item.arrival_date}</dd>
-        </div>
-        <div>
-          <dt>賞味期限</dt>
-          <dd>{item.expiry_date}</dd>
-        </div>
-        <div>
-          <dt>発注基準</dt>
-          <dd>{item.reorder_level} 個</dd>
-        </div>
-        <div>
-          <dt>状態</dt>
-          <dd>{status.detail}</dd>
         </div>
       </dl>
 
