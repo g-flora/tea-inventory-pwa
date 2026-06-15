@@ -139,6 +139,43 @@ function detectColumns(headers) {
   }
 }
 
+const CSV_DECODER_CANDIDATES = [
+  { encoding: 'utf-8', label: 'UTF-8' },
+  { encoding: 'shift_jis', label: 'Shift-JIS' },
+  { encoding: 'windows-31j', label: 'CP932' },
+]
+
+function countReplacementCharacters(text) {
+  return (String(text ?? '').match(/\uFFFD/g) ?? []).length
+}
+
+function decodeCsvBuffer(buffer, candidate) {
+  try {
+    return {
+      encoding: candidate.label,
+      text: new TextDecoder(candidate.encoding).decode(buffer),
+    }
+  } catch {
+    return null
+  }
+}
+
+function tryParseDecodedCsv(decoded) {
+  try {
+    return {
+      decoded,
+      result: parseAirRegiSalesCsvText(decoded.text),
+      replacementCount: countReplacementCharacters(decoded.text),
+    }
+  } catch (error) {
+    return {
+      decoded,
+      error,
+      replacementCount: countReplacementCharacters(decoded.text),
+    }
+  }
+}
+
 function findHeaderRow(rows) {
   for (let index = 0; index < Math.min(rows.length, 10); index += 1) {
     const headers = rows[index]
@@ -223,8 +260,28 @@ export async function readAirRegiSalesCsvFile(file) {
     throw new Error('CSVファイルを選択してください。')
   }
 
-  const text = await file.text()
-  return parseAirRegiSalesCsvText(text)
+  const buffer = await file.arrayBuffer()
+  const attempts = CSV_DECODER_CANDIDATES.map((candidate) => decodeCsvBuffer(buffer, candidate))
+    .filter(Boolean)
+    .map(tryParseDecodedCsv)
+  const successfulAttempts = attempts.filter((attempt) => attempt.result)
+
+  if (successfulAttempts.length) {
+    const bestAttempt = successfulAttempts.sort((a, b) => a.replacementCount - b.replacementCount)[0]
+
+    return {
+      ...bestAttempt.result,
+      encoding: bestAttempt.decoded.encoding,
+    }
+  }
+
+  const bestFailedAttempt = attempts.sort((a, b) => a.replacementCount - b.replacementCount)[0]
+  const error = new Error('CSVの文字コードを確認しましたが、列名を読み取れませんでした。UTF-8 または Shift-JIS のCSVか確認してください。')
+
+  error.encoding = bestFailedAttempt?.decoded?.encoding ?? ''
+  error.firstRowHeaders = bestFailedAttempt?.error?.firstRowHeaders ?? []
+  error.detectedColumns = bestFailedAttempt?.error?.detectedColumns ?? null
+  throw error
 }
 
 export function groupAirRegiSales(sales) {

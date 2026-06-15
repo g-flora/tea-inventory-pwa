@@ -241,6 +241,7 @@ export default function App() {
     message: '',
     status: '未選択',
     fileName: '',
+    encoding: '',
     firstRowHeaders: [],
     detectedColumns: null,
     warnings: [],
@@ -627,6 +628,7 @@ export default function App() {
       message: 'CSV読み込みを開始しました。',
       status: '読み込み中',
       fileName,
+      encoding: '',
       firstRowHeaders: [],
       detectedColumns: null,
       warnings: [],
@@ -646,6 +648,7 @@ export default function App() {
         error: '',
         status: '成功',
         fileName,
+        encoding: result.encoding ?? '',
         message: `${groupedSales.length}\u4ef6\u306e\u5546\u54c1\u5225\u58f2\u4e0a\u3092\u8aad\u307f\u8fbc\u307f\u307e\u3057\u305f\u3002\u307e\u3060\u5728\u5eab\u306f\u66f4\u65b0\u3057\u3066\u3044\u307e\u305b\u3093\u3002${warningMessage}`,
         firstRowHeaders: result.firstRowHeaders ?? [],
         detectedColumns: result.detectedColumns ?? null,
@@ -659,6 +662,7 @@ export default function App() {
         loading: false,
         status: '失敗',
         fileName,
+        encoding: csvError?.encoding ?? '',
         error: csvError instanceof Error ? csvError.message : 'CSV\u306e\u8aad\u307f\u8fbc\u307f\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002',
         message: '',
         firstRowHeaders: csvError?.firstRowHeaders ?? [],
@@ -1876,6 +1880,11 @@ function CsvView({
           <span>{'選択ファイル'}</span>
           <span>{airRegiCsvTest.fileName || '未選択'}</span>
           <span>{airRegiCsvTest.status || '未選択'}</span>
+        </div>
+        <div className="csv-row">
+          <span>{'文字コード'}</span>
+          <span>{airRegiCsvTest.encoding || '未確認'}</span>
+          <span>{airRegiCsvTest.encoding ? `文字コード：${airRegiCsvTest.encoding}` : '-'}</span>
         </div>
         <div className="csv-row">
           <span>{'CSV 1行目の列名'}</span>
