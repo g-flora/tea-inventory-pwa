@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { createWorker, OEM } from 'tesseract.js'
 import { hasSupabaseConfig, supabase } from './lib/supabaseClient'
+import { fetchAirRegiSalesTest } from './lib/airregi'
 import { buildAirRegiCsv, todayText } from './lib/inventory'
 import {
   extractExpiryDateFromOcr,
@@ -226,6 +227,12 @@ export default function App() {
   })
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [airRegiTest, setAirRegiTest] = useState({
+    loading: false,
+    error: '',
+    message: '',
+    sales: [],
+  })
   const [ocrState, setOcrState] = useState({
     busy: false,
     progress: 0,
@@ -575,6 +582,27 @@ export default function App() {
     setDeletingId(null)
   }
 
+  async function runAirRegiSalesTest() {
+    setAirRegiTest({ loading: true, error: '', message: '', sales: [] })
+
+    try {
+      const sales = await fetchAirRegiSalesTest()
+      setAirRegiTest({
+        loading: false,
+        error: '',
+        message: `${sales.length}件の売上明細を取得しました。`,
+        sales,
+      })
+    } catch (testError) {
+      setAirRegiTest({
+        loading: false,
+        error: testError instanceof Error ? testError.message : 'Airレジ売上取得テストに失敗しました。',
+        message: '',
+        sales: [],
+      })
+    }
+  }
+
   function downloadCsv() {
     const csv = buildAirRegiCsv(enrichedInventory)
     const blob = new Blob(['\ufeff', csv], { type: 'text/csv;charset=utf-8;' })
@@ -722,7 +750,14 @@ export default function App() {
         )}
 
         {activeView === 'csv' && (
-          <CsvView items={enrichedInventory} loading={loading} onRefresh={loadInventory} onDownload={downloadCsv} />
+          <CsvView
+            items={enrichedInventory}
+            loading={loading}
+            airRegiTest={airRegiTest}
+            onRefresh={loadInventory}
+            onDownload={downloadCsv}
+            onAirRegiSalesTest={runAirRegiSalesTest}
+          />
         )}
       </main>
 
@@ -1648,7 +1683,7 @@ function InventoryCard({ item, updating, deleting, editing, onUpdateQuantity, on
   )
 }
 
-function CsvView({ items, loading, onRefresh, onDownload }) {
+function CsvView({ items, loading, airRegiTest, onRefresh, onDownload, onAirRegiSalesTest }) {
   const previewItems = items.slice(0, 6)
 
   return (
@@ -1692,6 +1727,37 @@ function CsvView({ items, loading, onRefresh, onDownload }) {
       </div>
 
       <p className="csv-note">更新種別は「棚卸し・在庫確認」、更新メモは登録メモを使用します。</p>
+
+      <div className="csv-preview" aria-label="Airレジ売上取得テスト結果">
+        <div className="csv-row head">
+          <span>Airレジ売上取得テスト</span>
+          <span>読むだけ</span>
+          <span>在庫更新なし</span>
+        </div>
+        <div className="csv-row">
+          <span>売上明細を取得できるかだけ確認します</span>
+          <span>{airRegiTest.sales.length}件</span>
+          <span>
+            <button className="icon-text-button" type="button" onClick={onAirRegiSalesTest} disabled={airRegiTest.loading}>
+              <Database size={18} />
+              {airRegiTest.loading ? '取得中...' : '売上を取得'}
+            </button>
+          </span>
+        </div>
+        {airRegiTest.message && <div className="empty-state">{airRegiTest.message}</div>}
+        {airRegiTest.error && <div className="empty-state">{airRegiTest.error}</div>}
+        {airRegiTest.sales.map((sale, index) => (
+          <div className="action-row" key={sale.saleLineId || `airregi-sale-${index}`}>
+            <div>
+              <strong>{sale.productName || '商品名なし'}</strong>
+              <span>{`商品コード：${sale.productCode || '-'}`}</span>
+              <span>{`販売日時：${sale.soldAt || '-'}`}</span>
+              <span>{`売上明細ID：${sale.saleLineId || '-'}`}</span>
+            </div>
+            <span className="action-chip">{`販売数量：${sale.quantity}`}</span>
+          </div>
+        ))}
+      </div>
     </section>
   )
 }
