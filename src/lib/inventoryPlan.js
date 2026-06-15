@@ -29,6 +29,8 @@ function namesMatch(inventoryName, saleName) {
 }
 
 function matchesSale(item, sale) {
+  if (sale.isUnsupportedProductCode) return false
+
   const itemCode = normalizeText(item.product_code)
   const saleCode = normalizeText(sale.productCode)
 

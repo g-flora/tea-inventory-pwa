@@ -27,6 +27,27 @@ const COLUMN_ALIASES = {
   saleLineId: ['売上明細ID', '明細ID', '取引ID', 'saleLineId', 'lineId', 'id'],
 }
 
+const UNSUPPORTED_PRODUCT_NAME = '\u672a\u5bfe\u5fdc'
+
+export const AIRREGI_PRODUCT_NAME_BY_CODE = {
+  'TEA-AJI100': '\u5473\u5a18\u3000100g\u888b',
+  'TEA-AJI200': '\u5473\u5a18\u3000200g\u888b',
+  'TEA-KATA200': '\u304b\u305f\u3089\u3044\u3000200g\u888b',
+  'TEA-KATA500': '\u304b\u305f\u3089\u3044\u3000500g\u888b',
+  'TEA-ISE-TB30': '\u4f0a\u52e2\u6df1\u3080\u3057\u8336\u30c6\u30a3\u30fc\u30d0\u30c3\u30b030\u500b\u5165',
+  'TEA-RYOKU-TB50': '\u7dd1\u8336\u30c6\u30a3\u30fc\u30d0\u30c3\u30b050\u500b\u5165',
+  'TEA-KARI-HOJI150': '\u304b\u308a\u304c\u306d\u307b\u3046\u3058\u8336150g\u888b',
+  'TEA-FUKA-HOJI-TB20': '\u6df1\u84b8\u3057\u307b\u3046\u3058\u8336\u30c6\u30a3\u30fc\u30d0\u30c3\u30b020\u5165',
+}
+
+function normalizeProductCode(value) {
+  return String(value ?? '').trim().toUpperCase()
+}
+
+export function mapAirRegiProductCodeToProductName(productCode) {
+  return AIRREGI_PRODUCT_NAME_BY_CODE[normalizeProductCode(productCode)] ?? ''
+}
+
 function normalizeHeader(value) {
   return String(value ?? '')
     .replace(/^\uFEFF/, '')
@@ -133,10 +154,13 @@ export function parseAirRegiSalesCsvText(text) {
     .map((row, index) => {
       const rowNumber = headerIndex + index + 2
       const productCode = productCodeIndex >= 0 ? String(row[productCodeIndex] ?? '').trim() : ''
-      const productName = productNameIndex >= 0 ? String(row[productNameIndex] ?? '').trim() : ''
+      const rawProductName = productNameIndex >= 0 ? String(row[productNameIndex] ?? '').trim() : ''
+      const mappedProductName = productCode ? mapAirRegiProductCodeToProductName(productCode) : ''
+      const isUnsupportedProductCode = Boolean(productCode && !mappedProductName)
+      const productName = productCode ? mappedProductName || UNSUPPORTED_PRODUCT_NAME : rawProductName
       const quantity = parseQuantity(row[quantityIndex])
 
-      if (!productCode && !productName) {
+      if (!productCode && !rawProductName) {
         warnings.push(`${rowNumber}行目は商品コードと商品名が空なので読み飛ばしました。`)
         return null
       }
@@ -150,6 +174,9 @@ export function parseAirRegiSalesCsvText(text) {
         rowNumber,
         productCode,
         productName,
+        rawProductName,
+        mappedProductName,
+        isUnsupportedProductCode,
         quantity,
         soldAt: soldAtIndex >= 0 ? String(row[soldAtIndex] ?? '').trim() : '',
         saleLineId: saleLineIdIndex >= 0 ? String(row[saleLineIdIndex] ?? '').trim() : '',
@@ -181,12 +208,18 @@ export function groupAirRegiSales(sales) {
     const current = grouped.get(key) ?? {
       productCode: sale.productCode,
       productName: sale.productName,
+      rawProductName: sale.rawProductName,
+      mappedProductName: sale.mappedProductName,
+      isUnsupportedProductCode: sale.isUnsupportedProductCode,
       quantity: 0,
       rows: [],
     }
 
     current.productCode ||= sale.productCode
     current.productName ||= sale.productName
+    current.rawProductName ||= sale.rawProductName
+    current.mappedProductName ||= sale.mappedProductName
+    current.isUnsupportedProductCode ||= sale.isUnsupportedProductCode
     current.quantity += Number(sale.quantity ?? 0)
     current.rows.push(sale)
     grouped.set(key, current)
