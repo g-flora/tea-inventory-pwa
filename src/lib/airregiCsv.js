@@ -22,7 +22,7 @@ const COLUMN_ALIASES = {
     'itemName',
     'name',
   ],
-  quantity: ['販売数量', '売上数量', '数量', '販売数', '点数', 'quantity', 'qty', 'count'],
+  quantity: ['販売商品数', '販売商品', '販売数量', '売上数量', '数量', '販売数', '点数', 'quantity', 'qty', 'count'],
   soldAt: ['販売日時', '売上日時', '取引日時', '販売日', '日付', 'soldAt', 'sales_date', 'date'],
   saleLineId: ['売上明細ID', '明細ID', '取引ID', 'saleLineId', 'lineId', 'id'],
 }
