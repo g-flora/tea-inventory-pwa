@@ -119,6 +119,26 @@ function findColumnIndex(headers, aliases) {
   return normalizedHeaders.findIndex((header) => normalizedAliases.includes(header))
 }
 
+function buildColumnInfo(headers, index) {
+  return {
+    found: index >= 0,
+    index,
+    name: index >= 0 ? String(headers[index] ?? '') : '',
+  }
+}
+
+function detectColumns(headers) {
+  const productCodeIndex = findColumnIndex(headers, COLUMN_ALIASES.productCode)
+  const productNameIndex = findColumnIndex(headers, COLUMN_ALIASES.productName)
+  const quantityIndex = findColumnIndex(headers, COLUMN_ALIASES.quantity)
+
+  return {
+    productName: buildColumnInfo(headers, productNameIndex),
+    productCode: buildColumnInfo(headers, productCodeIndex),
+    quantity: buildColumnInfo(headers, quantityIndex),
+  }
+}
+
 function findHeaderRow(rows) {
   for (let index = 0; index < Math.min(rows.length, 10); index += 1) {
     const headers = rows[index]
@@ -137,9 +157,13 @@ function findHeaderRow(rows) {
 export function parseAirRegiSalesCsvText(text) {
   const rows = parseCsvRows(text)
   const headerRow = findHeaderRow(rows)
+  const firstRowHeaders = rows[0] ?? []
 
   if (!headerRow) {
-    throw new Error('商品コードまたは商品名、販売数量の列が見つかりませんでした。')
+    const error = new Error('CSVの列名を確認できませんでした。商品名、販売商品数、商品コードの列があるか確認してください。')
+    error.firstRowHeaders = firstRowHeaders
+    error.detectedColumns = detectColumns(firstRowHeaders)
+    throw error
   }
 
   const { headerIndex, headers } = headerRow
@@ -185,7 +209,10 @@ export function parseAirRegiSalesCsvText(text) {
     .filter(Boolean)
 
   return {
+    firstRowHeaders,
+    headerRowNumber: headerIndex + 1,
     headers,
+    detectedColumns: detectColumns(headers),
     sales,
     warnings,
   }

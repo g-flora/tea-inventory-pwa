@@ -239,6 +239,11 @@ export default function App() {
     loading: false,
     error: '',
     message: '',
+    status: '未選択',
+    fileName: '',
+    firstRowHeaders: [],
+    detectedColumns: null,
+    warnings: [],
     sales: [],
     groupedSales: [],
     plans: [],
@@ -614,10 +619,17 @@ export default function App() {
   }
 
   async function handleAirRegiCsvImport(file) {
+    const fileName = file?.name ?? ''
+
     setAirRegiCsvTest({
       loading: true,
       error: '',
-      message: '',
+      message: 'CSV読み込みを開始しました。',
+      status: '読み込み中',
+      fileName,
+      firstRowHeaders: [],
+      detectedColumns: null,
+      warnings: [],
       sales: [],
       groupedSales: [],
       plans: [],
@@ -632,7 +644,12 @@ export default function App() {
       setAirRegiCsvTest({
         loading: false,
         error: '',
+        status: '成功',
+        fileName,
         message: `${groupedSales.length}\u4ef6\u306e\u5546\u54c1\u5225\u58f2\u4e0a\u3092\u8aad\u307f\u8fbc\u307f\u307e\u3057\u305f\u3002\u307e\u3060\u5728\u5eab\u306f\u66f4\u65b0\u3057\u3066\u3044\u307e\u305b\u3093\u3002${warningMessage}`,
+        firstRowHeaders: result.firstRowHeaders ?? [],
+        detectedColumns: result.detectedColumns ?? null,
+        warnings: result.warnings ?? [],
         sales: result.sales,
         groupedSales,
         plans,
@@ -640,8 +657,13 @@ export default function App() {
     } catch (csvError) {
       setAirRegiCsvTest({
         loading: false,
+        status: '失敗',
+        fileName,
         error: csvError instanceof Error ? csvError.message : 'CSV\u306e\u8aad\u307f\u8fbc\u307f\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002',
         message: '',
+        firstRowHeaders: csvError?.firstRowHeaders ?? [],
+        detectedColumns: csvError?.detectedColumns ?? null,
+        warnings: [],
         sales: [],
         groupedSales: [],
         plans: [],
@@ -1749,6 +1771,17 @@ function CsvView({
     event.target.value = ''
   }
 
+  function formatCsvColumnStatus(columnInfo) {
+    if (!columnInfo) return '未確認'
+    if (!columnInfo.found) return '見つかりません'
+
+    return `見つかりました：${columnInfo.name || `${columnInfo.index + 1}列目`}`
+  }
+
+  function formatCsvHeaders(headers) {
+    return headers?.length ? headers.join(' / ') : 'まだ読み込んでいません'
+  }
+
   return (
     <section className="screen-panel">
       <div className="section-heading with-action">
@@ -1839,9 +1872,43 @@ function CsvView({
             />
           </span>
         </div>
+        <div className="csv-row">
+          <span>{'選択ファイル'}</span>
+          <span>{airRegiCsvTest.fileName || '未選択'}</span>
+          <span>{airRegiCsvTest.status || '未選択'}</span>
+        </div>
+        <div className="csv-row">
+          <span>{'CSV 1行目の列名'}</span>
+          <span>{formatCsvHeaders(airRegiCsvTest.firstRowHeaders)}</span>
+          <span>{airRegiCsvTest.firstRowHeaders?.length ? `${airRegiCsvTest.firstRowHeaders.length}列` : '-'}</span>
+        </div>
+        {airRegiCsvTest.detectedColumns && (
+          <>
+            <div className="csv-row">
+              <span>{'商品名列'}</span>
+              <span>{formatCsvColumnStatus(airRegiCsvTest.detectedColumns.productName)}</span>
+              <span>{'確認列：商品名'}</span>
+            </div>
+            <div className="csv-row">
+              <span>{'商品コード列'}</span>
+              <span>{formatCsvColumnStatus(airRegiCsvTest.detectedColumns.productCode)}</span>
+              <span>{'確認列：商品コード'}</span>
+            </div>
+            <div className="csv-row">
+              <span>{'数量列'}</span>
+              <span>{formatCsvColumnStatus(airRegiCsvTest.detectedColumns.quantity)}</span>
+              <span>{'確認列：販売商品数'}</span>
+            </div>
+          </>
+        )}
         {airRegiCsvTest.loading && <div className="empty-state">{'CSV\u3092\u8aad\u307f\u8fbc\u3093\u3067\u3044\u307e\u3059\u3002'}</div>}
         {airRegiCsvTest.message && <div className="empty-state">{airRegiCsvTest.message}</div>}
         {airRegiCsvTest.error && <div className="empty-state">{airRegiCsvTest.error}</div>}
+        {airRegiCsvTest.warnings?.map((warning, index) => (
+          <div className="empty-state" key={`airregi-csv-warning-${index}`}>
+            {warning}
+          </div>
+        ))}
         {airRegiCsvTest.groupedSales.length > 0 && (
           <>
             <div className="csv-row head">
