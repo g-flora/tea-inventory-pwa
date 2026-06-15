@@ -19,7 +19,9 @@ import {
 import { createWorker, OEM } from 'tesseract.js'
 import { hasSupabaseConfig, supabase } from './lib/supabaseClient'
 import { fetchAirRegiSalesTest } from './lib/airregi'
+import { groupAirRegiSales, readAirRegiSalesCsvFile } from './lib/airregiCsv'
 import { buildAirRegiCsv, todayText } from './lib/inventory'
+import { createInventoryReductionPlan } from './lib/inventoryPlan'
 import {
   extractExpiryDateFromOcr,
   getExpiryDateCandidatesFromOcr,
@@ -232,6 +234,14 @@ export default function App() {
     error: '',
     message: '',
     sales: [],
+  })
+  const [airRegiCsvTest, setAirRegiCsvTest] = useState({
+    loading: false,
+    error: '',
+    message: '',
+    sales: [],
+    groupedSales: [],
+    plans: [],
   })
   const [ocrState, setOcrState] = useState({
     busy: false,
@@ -603,6 +613,42 @@ export default function App() {
     }
   }
 
+  async function handleAirRegiCsvImport(file) {
+    setAirRegiCsvTest({
+      loading: true,
+      error: '',
+      message: '',
+      sales: [],
+      groupedSales: [],
+      plans: [],
+    })
+
+    try {
+      const result = await readAirRegiSalesCsvFile(file)
+      const groupedSales = groupAirRegiSales(result.sales)
+      const plans = createInventoryReductionPlan(enrichedInventory, groupedSales)
+      const warningMessage = result.warnings.length ? ` ${result.warnings.length}\u4ef6\u306e\u884c\u3092\u8aad\u307f\u98db\u3070\u3057\u307e\u3057\u305f\u3002` : ''
+
+      setAirRegiCsvTest({
+        loading: false,
+        error: '',
+        message: `${groupedSales.length}\u4ef6\u306e\u5546\u54c1\u5225\u58f2\u4e0a\u3092\u8aad\u307f\u8fbc\u307f\u307e\u3057\u305f\u3002\u307e\u3060\u5728\u5eab\u306f\u66f4\u65b0\u3057\u3066\u3044\u307e\u305b\u3093\u3002${warningMessage}`,
+        sales: result.sales,
+        groupedSales,
+        plans,
+      })
+    } catch (csvError) {
+      setAirRegiCsvTest({
+        loading: false,
+        error: csvError instanceof Error ? csvError.message : 'CSV\u306e\u8aad\u307f\u8fbc\u307f\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002',
+        message: '',
+        sales: [],
+        groupedSales: [],
+        plans: [],
+      })
+    }
+  }
+
   function downloadCsv() {
     const csv = buildAirRegiCsv(enrichedInventory)
     const blob = new Blob(['\ufeff', csv], { type: 'text/csv;charset=utf-8;' })
@@ -754,9 +800,11 @@ export default function App() {
             items={enrichedInventory}
             loading={loading}
             airRegiTest={airRegiTest}
+            airRegiCsvTest={airRegiCsvTest}
             onRefresh={loadInventory}
             onDownload={downloadCsv}
             onAirRegiSalesTest={runAirRegiSalesTest}
+            onAirRegiCsvImport={handleAirRegiCsvImport}
           />
         )}
       </main>
@@ -1683,8 +1731,23 @@ function InventoryCard({ item, updating, deleting, editing, onUpdateQuantity, on
   )
 }
 
-function CsvView({ items, loading, airRegiTest, onRefresh, onDownload, onAirRegiSalesTest }) {
+function CsvView({
+  items,
+  loading,
+  airRegiTest,
+  airRegiCsvTest,
+  onRefresh,
+  onDownload,
+  onAirRegiSalesTest,
+  onAirRegiCsvImport,
+}) {
   const previewItems = items.slice(0, 6)
+
+  function handleAirRegiCsvInputChange(event) {
+    const file = event.target.files?.[0]
+    if (file) onAirRegiCsvImport(file)
+    event.target.value = ''
+  }
 
   return (
     <section className="screen-panel">
@@ -1755,6 +1818,64 @@ function CsvView({ items, loading, airRegiTest, onRefresh, onDownload, onAirRegi
               <span>{`売上明細ID：${sale.saleLineId || '-'}`}</span>
             </div>
             <span className="action-chip">{`販売数量：${sale.quantity}`}</span>
+          </div>
+        ))}
+      </div>
+      <div className="csv-preview" aria-label="Air\u30ec\u30b8\u58f2\u4e0aCSV\u53d6\u308a\u8fbc\u307f\u30c6\u30b9\u30c8">
+        <div className="csv-row head">
+          <span>{'Air\u30ec\u30b8\u58f2\u4e0aCSV\u53d6\u308a\u8fbc\u307f\u30c6\u30b9\u30c8'}</span>
+          <span>{'\u8aad\u307f\u8fbc\u3080\u3060\u3051'}</span>
+          <span>{'\u5728\u5eab\u66f4\u65b0\u306a\u3057'}</span>
+        </div>
+        <div className="csv-row">
+          <span>{'CSV\u306e\u5546\u54c1\u5225\u58f2\u4e0a\u304b\u3089\u3001\u5728\u5eab\u6e1b\u7b97\u4e88\u5b9a\u3060\u3051\u3092\u8868\u793a\u3057\u307e\u3059\u3002'}</span>
+          <span>{`${airRegiCsvTest.groupedSales.length}\u4ef6`}</span>
+          <span>
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              onChange={handleAirRegiCsvInputChange}
+              disabled={airRegiCsvTest.loading}
+            />
+          </span>
+        </div>
+        {airRegiCsvTest.loading && <div className="empty-state">{'CSV\u3092\u8aad\u307f\u8fbc\u3093\u3067\u3044\u307e\u3059\u3002'}</div>}
+        {airRegiCsvTest.message && <div className="empty-state">{airRegiCsvTest.message}</div>}
+        {airRegiCsvTest.error && <div className="empty-state">{airRegiCsvTest.error}</div>}
+        {airRegiCsvTest.groupedSales.length > 0 && (
+          <>
+            <div className="csv-row head">
+              <span>{'\u8aad\u307f\u53d6\u308a\u7d50\u679c'}</span>
+              <span>{'\u8ca9\u58f2\u6570\u91cf'}</span>
+              <span>{'\u5546\u54c1\u30b3\u30fc\u30c9'}</span>
+            </div>
+            {airRegiCsvTest.groupedSales.map((sale, index) => (
+              <div className="csv-row" key={`airregi-csv-sale-${sale.productCode || sale.productName || index}`}>
+                <span>{sale.productName || '\u5546\u54c1\u540d\u306a\u3057'}</span>
+                <span>{`${sale.quantity}\u500b`}</span>
+                <span>{sale.productCode || '-'}</span>
+              </div>
+            ))}
+          </>
+        )}
+        {airRegiCsvTest.plans.map((plan, index) => (
+          <div className="action-row" key={`airregi-csv-plan-${plan.sale.productCode || plan.sale.productName || index}`}>
+            <div>
+              <strong>{plan.matchedProductName || plan.sale.productName || '\u5546\u54c1\u540d\u306a\u3057'}</strong>
+              <span>{`\u8ca9\u58f2\u6570\u91cf\uff1a${plan.requestedQuantity}\u500b`}</span>
+              <span>{`\u6e1b\u7b97\u4e88\u5b9a\uff1a${plan.plannedQuantity}\u500b`}</span>
+              {plan.shortageQuantity > 0 && <span>{`\u4e0d\u8db3\uff1a${plan.shortageQuantity}\u500b`}</span>}
+              {plan.reductions.length ? (
+                plan.reductions.map((reduction) => (
+                  <span key={`${reduction.inventoryId}-${reduction.expiryDate}`}>
+                    {`${reduction.expiryDate || '-'}\uff1a${reduction.beforeQuantity}\u500b \u2192 ${reduction.afterQuantity}\u500b\uff08-${reduction.reduceQuantity}\u500b\uff09`}
+                  </span>
+                ))
+              ) : (
+                <span>{'\u4e00\u81f4\u3059\u308b\u5728\u5eab\u304c\u3042\u308a\u307e\u305b\u3093\u3002'}</span>
+              )}
+            </div>
+            <span className="action-chip">{'\u4e88\u5b9a\u306e\u307f'}</span>
           </div>
         ))}
       </div>
