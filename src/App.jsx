@@ -20,7 +20,7 @@ import { createWorker, OEM } from 'tesseract.js'
 import { hasSupabaseConfig, supabase } from './lib/supabaseClient'
 import { fetchAirRegiSalesTest } from './lib/airregi'
 import { groupAirRegiSales, readAirRegiSalesCsvFile } from './lib/airregiCsv'
-import { buildAirRegiCsv, todayText } from './lib/inventory'
+import { buildAirRegiCsv, summarizeInventoryByProductName, todayText } from './lib/inventory'
 import { createInventoryReductionPlan } from './lib/inventoryPlan'
 import {
   extractExpiryDateFromOcr,
@@ -1741,7 +1741,7 @@ function CsvView({
   onAirRegiSalesTest,
   onAirRegiCsvImport,
 }) {
-  const previewItems = items.slice(0, 6)
+  const previewItems = summarizeInventoryByProductName(items).slice(0, 6)
 
   function handleAirRegiCsvInputChange(event) {
     const file = event.target.files?.[0]
@@ -1778,7 +1778,7 @@ function CsvView({
         </div>
         {previewItems.length ? (
           previewItems.map((item) => (
-            <div className="csv-row" key={`csv-${item.id}`}>
+            <div className="csv-row" key={`csv-${item.product_name}`}>
               <span>{item.product_name}</span>
               <span>{item.quantity}</span>
               <span>{item.quantity}</span>

@@ -75,8 +75,34 @@ export function sortInventory(items) {
   })
 }
 
+export function summarizeInventoryByProductName(items) {
+  const totals = new Map()
+
+  for (const item of items) {
+    const productName = item.product_name || '\u5546\u54c1\u540d\u672a\u8a2d\u5b9a'
+    const current = totals.get(productName) ?? {
+      product_name: productName,
+      quantity: 0,
+      memoSet: new Set(),
+    }
+    const quantity = Number(item.quantity ?? 0)
+
+    current.quantity += Number.isFinite(quantity) ? quantity : 0
+    if (item.memo) current.memoSet.add(String(item.memo).trim())
+    totals.set(productName, current)
+  }
+
+  return Array.from(totals.values())
+    .map((item) => ({
+      product_name: item.product_name,
+      quantity: item.quantity,
+      memo: Array.from(item.memoSet).filter(Boolean).join(' / '),
+    }))
+    .sort((a, b) => a.product_name.localeCompare(b.product_name, 'ja'))
+}
+
 export function buildAirRegiCsv(items) {
-  const rows = items.map((item) => [
+  const rows = summarizeInventoryByProductName(items).map((item) => [
     item.product_name,
     item.quantity,
     item.quantity,
