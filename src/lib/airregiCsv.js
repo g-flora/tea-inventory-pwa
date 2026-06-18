@@ -67,6 +67,59 @@ function parseQuantity(value) {
   return Number.isFinite(quantity) ? quantity : 0
 }
 
+function normalizeFingerprintValue(value) {
+  return String(value ?? '').trim().replace(/\s+/g, ' ')
+}
+
+function buildFingerprintPayload(sales) {
+  return JSON.stringify(
+    [...sales]
+      .map((sale) => ({
+        productCode: normalizeFingerprintValue(sale.productCode).toUpperCase(),
+        productName: normalizeFingerprintValue(sale.productName),
+        rawProductName: normalizeFingerprintValue(sale.rawProductName),
+        quantity: Number(sale.quantity ?? 0),
+        soldAt: normalizeFingerprintValue(sale.soldAt),
+        saleLineId: normalizeFingerprintValue(sale.saleLineId),
+      }))
+      .sort((a, b) =>
+        [
+          a.saleLineId.localeCompare(b.saleLineId),
+          a.productCode.localeCompare(b.productCode),
+          a.productName.localeCompare(b.productName, 'ja'),
+          a.rawProductName.localeCompare(b.rawProductName, 'ja'),
+          a.soldAt.localeCompare(b.soldAt),
+          a.quantity - b.quantity,
+        ].find((result) => result !== 0) ?? 0,
+      ),
+  )
+}
+
+function createFallbackFingerprint(value) {
+  let hash = 0x811c9dc5
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 0x01000193)
+  }
+
+  return `fnv1a-${(hash >>> 0).toString(16).padStart(8, '0')}`
+}
+
+export async function createAirRegiCsvFingerprint(sales) {
+  const payload = buildFingerprintPayload(sales)
+
+  if (!globalThis.crypto?.subtle) {
+    return createFallbackFingerprint(payload)
+  }
+
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(payload))
+
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('')
+}
+
 function parseCsvRows(text) {
   const rows = []
   let row = []
@@ -268,10 +321,12 @@ export async function readAirRegiSalesCsvFile(file) {
 
   if (successfulAttempts.length) {
     const bestAttempt = successfulAttempts.sort((a, b) => a.replacementCount - b.replacementCount)[0]
+    const csvFingerprint = await createAirRegiCsvFingerprint(bestAttempt.result.sales)
 
     return {
       ...bestAttempt.result,
       encoding: bestAttempt.decoded.encoding,
+      csvFingerprint,
     }
   }
 

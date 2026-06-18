@@ -20,6 +20,7 @@ import { createWorker, OEM } from 'tesseract.js'
 import { hasSupabaseConfig, supabase } from './lib/supabaseClient'
 import { fetchAirRegiSalesTest } from './lib/airregi'
 import { groupAirRegiSales, readAirRegiSalesCsvFile } from './lib/airregiCsv'
+import { checkAirRegiProcessedCsv } from './lib/airregiProcessedSales'
 import { buildAirRegiCsv, summarizeInventoryByProductName, todayText } from './lib/inventory'
 import { createInventoryReductionPlan } from './lib/inventoryPlan'
 import {
@@ -244,6 +245,8 @@ export default function App() {
     encoding: '',
     firstRowHeaders: [],
     detectedColumns: null,
+    csvFingerprint: '',
+    duplicateCheck: null,
     warnings: [],
     sales: [],
     groupedSales: [],
@@ -631,6 +634,8 @@ export default function App() {
       encoding: '',
       firstRowHeaders: [],
       detectedColumns: null,
+      csvFingerprint: '',
+      duplicateCheck: null,
       warnings: [],
       sales: [],
       groupedSales: [],
@@ -642,6 +647,19 @@ export default function App() {
       const groupedSales = groupAirRegiSales(result.sales)
       const plans = createInventoryReductionPlan(enrichedInventory, groupedSales)
       const warningMessage = result.warnings.length ? ` ${result.warnings.length}\u4ef6\u306e\u884c\u3092\u8aad\u307f\u98db\u3070\u3057\u307e\u3057\u305f\u3002` : ''
+      let duplicateCheck = null
+
+      try {
+        duplicateCheck = await checkAirRegiProcessedCsv(result.csvFingerprint)
+      } catch (duplicateError) {
+        duplicateCheck = {
+          checked: false,
+          exists: false,
+          record: null,
+          message: '二重取り込み確認に失敗しました。',
+          error: duplicateError instanceof Error ? duplicateError.message : '二重取り込み確認に失敗しました。',
+        }
+      }
 
       setAirRegiCsvTest({
         loading: false,
@@ -652,6 +670,8 @@ export default function App() {
         message: `${groupedSales.length}\u4ef6\u306e\u5546\u54c1\u5225\u58f2\u4e0a\u3092\u8aad\u307f\u8fbc\u307f\u307e\u3057\u305f\u3002\u307e\u3060\u5728\u5eab\u306f\u66f4\u65b0\u3057\u3066\u3044\u307e\u305b\u3093\u3002${warningMessage}`,
         firstRowHeaders: result.firstRowHeaders ?? [],
         detectedColumns: result.detectedColumns ?? null,
+        csvFingerprint: result.csvFingerprint ?? '',
+        duplicateCheck,
         warnings: result.warnings ?? [],
         sales: result.sales,
         groupedSales,
@@ -667,6 +687,8 @@ export default function App() {
         message: '',
         firstRowHeaders: csvError?.firstRowHeaders ?? [],
         detectedColumns: csvError?.detectedColumns ?? null,
+        csvFingerprint: '',
+        duplicateCheck: null,
         warnings: [],
         sales: [],
         groupedSales: [],
@@ -1886,6 +1908,14 @@ function CsvView({
           <span>{airRegiCsvTest.encoding || '未確認'}</span>
           <span>{airRegiCsvTest.encoding ? `文字コード：${airRegiCsvTest.encoding}` : '-'}</span>
         </div>
+        {airRegiCsvTest.csvFingerprint && (
+          <div className="csv-row">
+            <span>{'二重取り込みチェック'}</span>
+            <span>{airRegiCsvTest.duplicateCheck?.message || '未確認'}</span>
+            <span>{airRegiCsvTest.duplicateCheck?.exists ? '反映済み' : '未反映'}</span>
+          </div>
+        )}
+        {airRegiCsvTest.duplicateCheck?.error && <div className="empty-state">{airRegiCsvTest.duplicateCheck.error}</div>}
         <div className="csv-row">
           <span>{'CSV 1行目の列名'}</span>
           <span>{formatCsvHeaders(airRegiCsvTest.firstRowHeaders)}</span>
