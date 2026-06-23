@@ -8,7 +8,7 @@ export async function checkAirRegiProcessedCsv(csvFingerprint) {
       checked: false,
       exists: false,
       record: null,
-      message: 'CSVの識別情報を作成できませんでした。',
+      message: 'csv_fingerprint is missing.',
     }
   }
 
@@ -17,7 +17,7 @@ export async function checkAirRegiProcessedCsv(csvFingerprint) {
       checked: false,
       exists: false,
       record: null,
-      message: 'Supabase接続情報が未設定のため、二重取り込み確認は未実行です。',
+      message: 'Supabase connection is not configured.',
     }
   }
 
@@ -39,4 +39,37 @@ export async function checkAirRegiProcessedCsv(csvFingerprint) {
     record: data ?? null,
     message: exists ? '反映済みCSVです' : '未反映CSVです',
   }
+}
+
+export async function applyAirRegiCsvImport({ csvFingerprint, sourceFilename, items, memo = '' }) {
+  if (!hasSupabaseConfig || !supabase) {
+    throw new Error('Supabase connection is not configured.')
+  }
+
+  if (!csvFingerprint) {
+    throw new Error('csv_fingerprint is required')
+  }
+
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new Error('items are required')
+  }
+
+  const payloadItems = items.map((item) => ({
+    productName: item.productName,
+    quantity: Number(item.quantity),
+    isMapped: true,
+  }))
+
+  const { data, error } = await supabase.rpc('apply_airregi_csv_import', {
+    p_csv_fingerprint: csvFingerprint,
+    p_source_filename: sourceFilename ?? '',
+    p_items: payloadItems,
+    p_memo: memo,
+  })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return data
 }

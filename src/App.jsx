@@ -20,7 +20,7 @@ import { createWorker, OEM } from 'tesseract.js'
 import { hasSupabaseConfig, supabase } from './lib/supabaseClient'
 import { fetchAirRegiSalesTest } from './lib/airregi'
 import { groupAirRegiSales, readAirRegiSalesCsvFile } from './lib/airregiCsv'
-import { checkAirRegiProcessedCsv } from './lib/airregiProcessedSales'
+import { applyAirRegiCsvImport, checkAirRegiProcessedCsv } from './lib/airregiProcessedSales'
 import { buildAirRegiCsv, summarizeInventoryByProductName, todayText } from './lib/inventory'
 import { createInventoryReductionPlan } from './lib/inventoryPlan'
 import {
@@ -191,6 +191,52 @@ function buildOcrResult(text) {
   }
 }
 
+function getAirRegiCsvExclusionReason(sale) {
+  const productCode = String(sale.productCode ?? '').trim()
+  const quantity = Number(sale.quantity ?? 0)
+
+  if (!Number.isFinite(quantity) || quantity <= 0) return '数量エラー'
+  if (!productCode) return '商品コードなし・管理対象外'
+  if (sale.isUnsupportedProductCode || !sale.mappedProductName) return '未対応コード'
+
+  return '管理対象外'
+}
+
+function buildAirRegiCsvImportTargets(groupedSales) {
+  const importItemsByName = new Map()
+  const excludedSales = []
+
+  for (const sale of groupedSales) {
+    const productCode = String(sale.productCode ?? '').trim()
+    const quantity = Number(sale.quantity ?? 0)
+    const canImport =
+      productCode &&
+      sale.mappedProductName &&
+      !sale.isUnsupportedProductCode &&
+      Number.isFinite(quantity) &&
+      quantity > 0
+
+    if (canImport) {
+      const current = importItemsByName.get(sale.mappedProductName) ?? {
+        productName: sale.mappedProductName,
+        quantity: 0,
+        isMapped: true,
+      }
+      current.quantity += quantity
+      importItemsByName.set(sale.mappedProductName, current)
+    } else {
+      excludedSales.push({
+        ...sale,
+        reason: getAirRegiCsvExclusionReason(sale),
+      })
+    }
+  }
+
+  return {
+    importItems: Array.from(importItemsByName.values()),
+    excludedSales,
+  }
+}
 async function recognizeOcrBlob(imageBlob, onProgress = () => {}) {
   let worker = null
 
@@ -250,7 +296,11 @@ export default function App() {
     warnings: [],
     sales: [],
     groupedSales: [],
+    importItems: [],
+    excludedSales: [],
     plans: [],
+    applying: false,
+    applyResult: null,
   })
   const [ocrState, setOcrState] = useState({
     busy: false,
@@ -639,13 +689,24 @@ export default function App() {
       warnings: [],
       sales: [],
       groupedSales: [],
+      importItems: [],
+      excludedSales: [],
       plans: [],
+      applying: false,
+      applyResult: null,
     })
 
     try {
       const result = await readAirRegiSalesCsvFile(file)
       const groupedSales = groupAirRegiSales(result.sales)
-      const plans = createInventoryReductionPlan(enrichedInventory, groupedSales)
+      const { importItems, excludedSales } = buildAirRegiCsvImportTargets(groupedSales)
+      const planSales = importItems.map(({ productName, quantity }) => ({
+        productName,
+        quantity,
+        productCode: '',
+        isUnsupportedProductCode: false,
+      }))
+      const plans = createInventoryReductionPlan(enrichedInventory, planSales)
       const warningMessage = result.warnings.length ? ` ${result.warnings.length}\u4ef6\u306e\u884c\u3092\u8aad\u307f\u98db\u3070\u3057\u307e\u3057\u305f\u3002` : ''
       let duplicateCheck = null
 
@@ -675,7 +736,11 @@ export default function App() {
         warnings: result.warnings ?? [],
         sales: result.sales,
         groupedSales,
+        importItems,
+        excludedSales,
         plans,
+        applying: false,
+        applyResult: null,
       })
     } catch (csvError) {
       setAirRegiCsvTest({
@@ -692,11 +757,83 @@ export default function App() {
         warnings: [],
         sales: [],
         groupedSales: [],
+        importItems: [],
+        excludedSales: [],
         plans: [],
+        applying: false,
+        applyResult: null,
       })
     }
   }
 
+  async function handleAirRegiCsvApply() {
+    const hasShortage = airRegiCsvTest.plans.some((plan) => Number(plan.shortageQuantity ?? 0) > 0)
+    const hasExcludedSales = (airRegiCsvTest.excludedSales?.length ?? 0) > 0
+
+    if (
+      airRegiCsvTest.duplicateCheck?.exists ||
+      hasShortage ||
+      hasExcludedSales ||
+      airRegiCsvTest.error ||
+      airRegiCsvTest.loading ||
+      airRegiCsvTest.applying
+    ) {
+      setAirRegiCsvTest((current) => ({
+        ...current,
+        error: 'このCSVはまだ在庫に反映できません。表示内容を確認してください。',
+      }))
+      return
+    }
+
+    if (!airRegiCsvTest.csvFingerprint || !airRegiCsvTest.importItems.length) {
+      setAirRegiCsvTest((current) => ({
+        ...current,
+        error: '反映できるCSV明細がありません。',
+      }))
+      return
+    }
+
+    const confirmed = window.confirm('このCSVの売上分を在庫に反映しますか？\n反映後は同じCSVをもう一度反映できません。')
+    if (!confirmed) return
+
+    setAirRegiCsvTest((current) => ({
+      ...current,
+      applying: true,
+      error: '',
+      message: '在庫反映中です。',
+    }))
+
+    try {
+      const applyResult = await applyAirRegiCsvImport({
+        csvFingerprint: airRegiCsvTest.csvFingerprint,
+        sourceFilename: airRegiCsvTest.fileName,
+        items: airRegiCsvTest.importItems,
+        memo: 'AirRegi CSV import',
+      })
+
+      await loadInventory()
+
+      setAirRegiCsvTest((current) => ({
+        ...current,
+        applying: false,
+        error: '',
+        message: '在庫に反映しました。',
+        duplicateCheck: {
+          checked: true,
+          exists: true,
+          record: current.duplicateCheck?.record ?? null,
+          message: '反映済みCSVです',
+        },
+        applyResult,
+      }))
+    } catch (applyError) {
+      setAirRegiCsvTest((current) => ({
+        ...current,
+        applying: false,
+        error: applyError instanceof Error ? applyError.message : '在庫反映に失敗しました。',
+      }))
+    }
+  }
   function downloadCsv() {
     const csv = buildAirRegiCsv(enrichedInventory)
     const blob = new Blob(['\ufeff', csv], { type: 'text/csv;charset=utf-8;' })
@@ -853,6 +990,7 @@ export default function App() {
             onDownload={downloadCsv}
             onAirRegiSalesTest={runAirRegiSalesTest}
             onAirRegiCsvImport={handleAirRegiCsvImport}
+            onAirRegiCsvApply={handleAirRegiCsvApply}
           />
         )}
       </main>
@@ -1788,8 +1926,39 @@ function CsvView({
   onDownload,
   onAirRegiSalesTest,
   onAirRegiCsvImport,
+  onAirRegiCsvApply,
 }) {
   const previewItems = summarizeInventoryByProductName(items).slice(0, 6)
+  const hasAirRegiCsvShortage = airRegiCsvTest.plans.some((plan) => Number(plan.shortageQuantity ?? 0) > 0)
+  const hasAirRegiCsvExcludedSales = (airRegiCsvTest.excludedSales?.length ?? 0) > 0
+  const airRegiCsvImportQuantity = (airRegiCsvTest.importItems ?? []).reduce(
+    (sum, item) => sum + Number(item.quantity ?? 0),
+    0,
+  )
+  const canApplyAirRegiCsv =
+    hasSupabaseConfig &&
+    !airRegiCsvTest.loading &&
+    !airRegiCsvTest.applying &&
+    !airRegiCsvTest.error &&
+    Boolean(airRegiCsvTest.csvFingerprint) &&
+    airRegiCsvTest.duplicateCheck?.checked &&
+    !airRegiCsvTest.duplicateCheck?.exists &&
+    (airRegiCsvTest.importItems?.length ?? 0) > 0 &&
+    !hasAirRegiCsvShortage &&
+    !hasAirRegiCsvExcludedSales
+  const airRegiCsvApplyStatus = (() => {
+    if (!hasSupabaseConfig) return 'Supabase未接続'
+    if (airRegiCsvTest.loading) return 'CSV読み込み中'
+    if (airRegiCsvTest.applying) return '反映中'
+    if (airRegiCsvTest.error) return 'エラー確認'
+    if (!airRegiCsvTest.csvFingerprint) return 'CSV未選択'
+    if (!airRegiCsvTest.duplicateCheck?.checked) return '二重取り込み確認待ち'
+    if (airRegiCsvTest.duplicateCheck?.exists) return '反映済みCSVです'
+    if (hasAirRegiCsvExcludedSales) return '対象外商品あり'
+    if (hasAirRegiCsvShortage) return '在庫不足あり'
+    if (!(airRegiCsvTest.importItems?.length ?? 0)) return '反映対象なし'
+    return '反映できます'
+  })()
 
   function handleAirRegiCsvInputChange(event) {
     const file = event.target.files?.[0]
@@ -1916,6 +2085,40 @@ function CsvView({
           </div>
         )}
         {airRegiCsvTest.duplicateCheck?.error && <div className="empty-state">{airRegiCsvTest.duplicateCheck.error}</div>}
+        {airRegiCsvTest.importItems?.length > 0 && (
+          <div className="csv-row">
+            <span>{'反映対象'}</span>
+            <span>{`${airRegiCsvTest.importItems.length}件`}</span>
+            <span>{`${airRegiCsvImportQuantity}個`}</span>
+          </div>
+        )}
+        {hasAirRegiCsvExcludedSales && (
+          <>
+            <div className="csv-row head">
+              <span>{'反映対象外'}</span>
+              <span>{'数量'}</span>
+              <span>{'理由'}</span>
+            </div>
+            {airRegiCsvTest.excludedSales.map((sale, index) => (
+              <div className="csv-row" key={`airregi-csv-excluded-${sale.productCode || sale.productName || index}`}>
+                <span>{sale.rawProductName || sale.productName || '商品名なし'}</span>
+                <span>{`${sale.quantity ?? 0}個`}</span>
+                <span>{sale.reason || '対象外'}</span>
+              </div>
+            ))}
+          </>
+        )}
+        {airRegiCsvTest.csvFingerprint && (
+          <div className="csv-row">
+            <span>{'在庫反映'}</span>
+            <span>{airRegiCsvApplyStatus}</span>
+            <span>
+              <button type="button" className="download-button" onClick={onAirRegiCsvApply} disabled={!canApplyAirRegiCsv}>
+                {airRegiCsvTest.applying ? '反映中...' : '在庫に反映する'}
+              </button>
+            </span>
+          </div>
+        )}
         <div className="csv-row">
           <span>{'CSV 1行目の列名'}</span>
           <span>{formatCsvHeaders(airRegiCsvTest.firstRowHeaders)}</span>
