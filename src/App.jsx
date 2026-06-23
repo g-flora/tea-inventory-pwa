@@ -202,6 +202,13 @@ function getAirRegiCsvExclusionReason(sale) {
   return '管理対象外'
 }
 
+function shouldBlockAirRegiCsvApply(sale) {
+  const productCode = String(sale.productCode ?? '').trim()
+  const quantity = Number(sale.quantity ?? 0)
+
+  return !Number.isFinite(quantity) || quantity <= 0 || Boolean(productCode && (sale.isUnsupportedProductCode || !sale.mappedProductName))
+}
+
 function buildAirRegiCsvImportTargets(groupedSales) {
   const importItemsByName = new Map()
   const excludedSales = []
@@ -228,6 +235,7 @@ function buildAirRegiCsvImportTargets(groupedSales) {
       excludedSales.push({
         ...sale,
         reason: getAirRegiCsvExclusionReason(sale),
+        blocksApply: shouldBlockAirRegiCsvApply(sale),
       })
     }
   }
@@ -768,12 +776,12 @@ export default function App() {
 
   async function handleAirRegiCsvApply() {
     const hasShortage = airRegiCsvTest.plans.some((plan) => Number(plan.shortageQuantity ?? 0) > 0)
-    const hasExcludedSales = (airRegiCsvTest.excludedSales?.length ?? 0) > 0
+    const hasBlockingExcludedSales = (airRegiCsvTest.excludedSales ?? []).some((sale) => sale.blocksApply)
 
     if (
       airRegiCsvTest.duplicateCheck?.exists ||
       hasShortage ||
-      hasExcludedSales ||
+      hasBlockingExcludedSales ||
       airRegiCsvTest.error ||
       airRegiCsvTest.loading ||
       airRegiCsvTest.applying
@@ -793,7 +801,7 @@ export default function App() {
       return
     }
 
-    const confirmed = window.confirm('このCSVの売上分を在庫に反映しますか？\n反映後は同じCSVをもう一度反映できません。')
+    const confirmed = window.confirm('このCSVの売上分を在庫に反映しますか？\n対象外商品は反映されません。\n反映後は同じCSVをもう一度反映できません。')
     if (!confirmed) return
 
     setAirRegiCsvTest((current) => ({
@@ -1931,6 +1939,7 @@ function CsvView({
   const previewItems = summarizeInventoryByProductName(items).slice(0, 6)
   const hasAirRegiCsvShortage = airRegiCsvTest.plans.some((plan) => Number(plan.shortageQuantity ?? 0) > 0)
   const hasAirRegiCsvExcludedSales = (airRegiCsvTest.excludedSales?.length ?? 0) > 0
+  const hasAirRegiCsvBlockingExcludedSales = (airRegiCsvTest.excludedSales ?? []).some((sale) => sale.blocksApply)
   const airRegiCsvImportQuantity = (airRegiCsvTest.importItems ?? []).reduce(
     (sum, item) => sum + Number(item.quantity ?? 0),
     0,
@@ -1945,7 +1954,7 @@ function CsvView({
     !airRegiCsvTest.duplicateCheck?.exists &&
     (airRegiCsvTest.importItems?.length ?? 0) > 0 &&
     !hasAirRegiCsvShortage &&
-    !hasAirRegiCsvExcludedSales
+    !hasAirRegiCsvBlockingExcludedSales
   const airRegiCsvApplyStatus = (() => {
     if (!hasSupabaseConfig) return 'Supabase未接続'
     if (airRegiCsvTest.loading) return 'CSV読み込み中'
@@ -1954,8 +1963,9 @@ function CsvView({
     if (!airRegiCsvTest.csvFingerprint) return 'CSV未選択'
     if (!airRegiCsvTest.duplicateCheck?.checked) return '二重取り込み確認待ち'
     if (airRegiCsvTest.duplicateCheck?.exists) return '反映済みCSVです'
-    if (hasAirRegiCsvExcludedSales) return '対象外商品あり'
+    if (hasAirRegiCsvBlockingExcludedSales) return '未対応商品あり'
     if (hasAirRegiCsvShortage) return '在庫不足あり'
+    if (hasAirRegiCsvExcludedSales) return '対象外商品は反映されません'
     if (!(airRegiCsvTest.importItems?.length ?? 0)) return '反映対象なし'
     return '反映できます'
   })()
@@ -2095,7 +2105,7 @@ function CsvView({
         {hasAirRegiCsvExcludedSales && (
           <>
             <div className="csv-row head">
-              <span>{'反映対象外'}</span>
+              <span>{'反映対象外（反映されません）'}</span>
               <span>{'数量'}</span>
               <span>{'理由'}</span>
             </div>
