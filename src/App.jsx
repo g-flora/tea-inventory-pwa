@@ -1707,7 +1707,7 @@ function InventoryView({
                 <strong>{product.product_name}</strong>
                 <span>{`\u5408\u8a08\u5728\u5eab\uff1a${product.totalQuantity}\u500b`}</span>
               </div>
-              <span className="action-chip">{`\u76ee\u5b89\uff1a${LOW_STOCK_THRESHOLD}\u500b\u4ee5\u4e0b`}</span>
+              <span className="action-chip">{`\u767a\u6ce8\u57fa\u6e96\uff1a\u5728\u5eab${LOW_STOCK_THRESHOLD}\u500b\u4ee5\u4e0b`}</span>
             </div>
           ))}
         </ActionGroup>

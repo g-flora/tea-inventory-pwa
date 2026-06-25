@@ -764,6 +764,15 @@ h1 {
   border-top: 0;
 }
 
+.action-row.stock {
+  border-top: 0;
+  border-left: 5px solid #d97706;
+  border-radius: 8px;
+  margin: 8px 0;
+  padding: 10px 12px;
+  background: #fff7ed;
+}
+
 .action-row div {
   display: grid;
   gap: 4px;
@@ -791,8 +800,9 @@ h1 {
 }
 
 .action-row.stock .action-chip {
-  background: var(--blue-bg);
-  color: var(--blue);
+  background: transparent;
+  color: #9a5a00;
+  font-weight: 800;
 }
 
 .action-row.expiring .action-chip {
