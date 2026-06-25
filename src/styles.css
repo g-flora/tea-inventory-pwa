@@ -958,6 +958,34 @@ h1 {
   border: 1px solid var(--line);
   border-radius: 8px;
 }
+.csv-drop-area {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  margin: 12px;
+  min-height: 132px;
+  border: 2px dashed #9ec8b6;
+  border-radius: 8px;
+  padding: 18px;
+  background: #f6fbf8;
+  color: var(--brand);
+  text-align: center;
+  font-weight: 900;
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+}
+
+.csv-drop-area span {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.csv-drop-area.active {
+  border-color: var(--green);
+  background: #e7f7ef;
+  transform: scale(1.01);
+}
+
 
 .csv-row {
   display: grid;

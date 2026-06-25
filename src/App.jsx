@@ -1937,6 +1937,8 @@ function CsvView({
   onAirRegiCsvApply,
 }) {
   const previewItems = summarizeInventoryByProductName(items)
+  const [isAirRegiCsvDragActive, setIsAirRegiCsvDragActive] = useState(false)
+  const [airRegiCsvFileError, setAirRegiCsvFileError] = useState('')
   const hasAirRegiCsvShortage = airRegiCsvTest.plans.some((plan) => Number(plan.shortageQuantity ?? 0) > 0)
   const hasAirRegiCsvExcludedSales = (airRegiCsvTest.excludedSales?.length ?? 0) > 0
   const hasAirRegiCsvBlockingExcludedSales = (airRegiCsvTest.excludedSales ?? []).some((sale) => sale.blocksApply)
@@ -1970,10 +1972,48 @@ function CsvView({
     return '反映できます'
   })()
 
+  function isAcceptedAirRegiCsvFile(file) {
+    const fileName = String(file?.name ?? '').toLowerCase()
+    const fileType = String(file?.type ?? '').toLowerCase()
+
+    return fileName.endsWith('.csv') || fileType === 'text/csv' || fileType === 'application/vnd.ms-excel'
+  }
+
+  function handleAirRegiCsvFile(file) {
+    if (!file) return
+
+    if (!isAcceptedAirRegiCsvFile(file)) {
+      setAirRegiCsvFileError('CSVファイルを選択してください。')
+      return
+    }
+
+    setAirRegiCsvFileError('')
+    onAirRegiCsvImport(file)
+  }
+
   function handleAirRegiCsvInputChange(event) {
     const file = event.target.files?.[0]
-    if (file) onAirRegiCsvImport(file)
+    handleAirRegiCsvFile(file)
     event.target.value = ''
+  }
+
+  function handleAirRegiCsvDragOver(event) {
+    event.preventDefault()
+    if (!airRegiCsvTest.loading) setIsAirRegiCsvDragActive(true)
+  }
+
+  function handleAirRegiCsvDragLeave(event) {
+    event.preventDefault()
+    setIsAirRegiCsvDragActive(false)
+  }
+
+  function handleAirRegiCsvDrop(event) {
+    event.preventDefault()
+    setIsAirRegiCsvDragActive(false)
+    if (airRegiCsvTest.loading) return
+
+    const file = event.dataTransfer?.files?.[0]
+    handleAirRegiCsvFile(file)
   }
 
   function formatCsvColumnStatus(columnInfo) {
@@ -2065,6 +2105,16 @@ function CsvView({
           <span>{'\u8aad\u307f\u8fbc\u3080\u3060\u3051'}</span>
           <span>{'\u5728\u5eab\u66f4\u65b0\u306a\u3057'}</span>
         </div>
+        <div
+          className={`csv-drop-area${isAirRegiCsvDragActive ? ' active' : ''}`}
+          onDragOver={handleAirRegiCsvDragOver}
+          onDragLeave={handleAirRegiCsvDragLeave}
+          onDrop={handleAirRegiCsvDrop}
+        >
+          <Upload size={28} />
+          <strong>{'CSVファイルをここにドラッグ＆ドロップ'}</strong>
+          <span>{'または下のボタンからCSVファイルを選択してください。'}</span>
+        </div>
         <div className="csv-row">
           <span>{'CSV\u306e\u5546\u54c1\u5225\u58f2\u4e0a\u304b\u3089\u3001\u5728\u5eab\u6e1b\u7b97\u4e88\u5b9a\u3060\u3051\u3092\u8868\u793a\u3057\u307e\u3059\u3002'}</span>
           <span>{`${airRegiCsvTest.groupedSales.length}\u4ef6`}</span>
@@ -2077,6 +2127,7 @@ function CsvView({
             />
           </span>
         </div>
+        {airRegiCsvFileError && <div className="empty-state">{airRegiCsvFileError}</div>}
         <div className="csv-row">
           <span>{'選択ファイル'}</span>
           <span>{airRegiCsvTest.fileName || '未選択'}</span>
