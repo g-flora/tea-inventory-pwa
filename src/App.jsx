@@ -369,7 +369,7 @@ export default function App() {
   }
 
   async function handleSubmit(event) {
-    event.preventDefault()
+    event?.preventDefault?.()
     setMessage('')
     setError('')
 
@@ -378,8 +378,8 @@ export default function App() {
       return
     }
 
-    if (!form.product_name.trim() || !form.expiry_date) {
-      setError('\u5546\u54c1\u540d\u3001\u8cde\u5473\u671f\u9650\u3092\u5165\u529b\u3057\u3066\u304f\u3060\u3055\u3044\u3002')
+    if (!form.product_name.trim() || !form.arrival_date || !form.expiry_date) {
+      setError('\u5546\u54c1\u540d\u3001\u5165\u8377\u65e5\u3001\u8cde\u5473\u671f\u9650\u3092\u5165\u529b\u3057\u3066\u304f\u3060\u3055\u3044\u3002')
       return
     }
 
@@ -1039,8 +1039,26 @@ function RegisterView({ form, ocrState, saving, onChange, onOcrBlob, onRegisterC
   })
   const [bulkCandidates, setBulkCandidates] = useState([])
   const [registeringCandidateId, setRegisteringCandidateId] = useState(null)
+  const manualCandidate = {
+    id: 'manual-entry',
+    sourceLabel: ocrState.text ? '\u5199\u771f\u8aad\u307f\u53d6\u308a\u5019\u88dc' : '\u624b\u5165\u529b\u767b\u9332',
+    status: 'ready',
+    error: '',
+    productCandidates: ocrState.productCandidates ?? [],
+    expiryDateCandidates: ocrState.expiryDateCandidates ?? [],
+    text: ocrState.text,
+    form,
+  }
 
   useEffect(() => () => stopCameraStream(), [])
+
+  function updateManualCandidate(candidateId, field, value) {
+    onChange(field, value)
+  }
+
+  function registerManualCandidate() {
+    onSubmit()
+  }
 
   useEffect(() => {
     if (!cameraActive || !streamRef.current || !videoRef.current) {
@@ -1456,47 +1474,20 @@ function RegisterView({ form, ocrState, saving, onChange, onOcrBlob, onRegisterC
         {cameraActive && !cameraReady && !cameraError && <p className="ocr-notice">カメラ映像を準備中です。</p>}
         {ocrState.notice && <p className="ocr-notice">{ocrState.notice}</p>}
 
-        {(ocrState.productCandidates?.length > 0 || ocrState.expiryDateCandidates?.length > 0) && (
-          <div className="ocr-result">
-            {ocrState.productCandidates?.length > 0 && (
-              <div style={{ display: 'grid', gap: '8px', marginBottom: '12px' }}>
-                <p>{'商品名候補'}</p>
-                {ocrState.productCandidates.map((candidate) => (
-                  <button
-                    className="icon-text-button"
-                    type="button"
-                    key={candidate.name}
-                    onClick={() => onChange('product_name', candidate.name)}
-                  >
-                    {candidate.name}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {ocrState.expiryDateCandidates?.length > 0 && (
-              <div style={{ display: 'grid', gap: '8px' }}>
-                <p>{'賞味期限候補'}</p>
-                {ocrState.expiryDateCandidates.map((candidate) => (
-                  <button
-                    className="icon-text-button"
-                    type="button"
-                    key={candidate.value}
-                    onClick={() => onChange('expiry_date', candidate.value)}
-                  >
-                    {candidate.value}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {ocrState.text && (
-          <details className="ocr-result">
-            <summary>読み取り文字を確認</summary>
-            <pre>{ocrState.text}</pre>
-          </details>
+        {bulkCandidates.length === 0 && (
+          <section className="bulk-ocr-panel" aria-label="\u5165\u8377\u767b\u9332\u5019\u88dc">
+            <div className="bulk-ocr-header">
+              <h3>{'\u5165\u8377\u767b\u9332\u5019\u88dc'}</h3>
+              <span>{ocrState.text ? '\u5199\u771f\u8aad\u307f\u53d6\u308a' : '\u624b\u5165\u529b'}</span>
+            </div>
+            <BulkOcrCandidateCard
+              candidate={manualCandidate}
+              registering={saving}
+              onChange={updateManualCandidate}
+              onRegister={registerManualCandidate}
+              showRemove={false}
+            />
+          </section>
         )}
 
         {(bulkOcrState.busy || bulkOcrState.notice) && (
@@ -1533,91 +1524,11 @@ function RegisterView({ form, ocrState, saving, onChange, onOcrBlob, onRegisterC
         )}
 
       </section>
-      <form className="entry-form" onSubmit={onSubmit}>
-        <label>
-          <span>商品名</span>
-          <select
-            value={form.product_name}
-            onChange={(event) => onChange('product_name', event.target.value)}
-            autoComplete="off"
-            required
-          >
-            <option value="">商品名を選択</option>
-            {productNameOptions.map((productName) => (
-              <option key={productName} value={productName}>
-                {productName}
-              </option>
-            ))}
-          </select>
-        </label>
-
-
-        <div className="form-row">
-          <label>
-            <span>入荷日</span>
-            <input
-              type="date"
-              value={form.arrival_date}
-              onChange={(event) => onChange('arrival_date', event.target.value)}
-              required
-            />
-          </label>
-
-          <label>
-            <span>賞味期限</span>
-            <input
-              type="date"
-              value={form.expiry_date}
-              onChange={(event) => onChange('expiry_date', event.target.value)}
-              required
-            />
-          </label>
-        </div>
-
-        <div className="form-row">
-          <label>
-            <span>在庫数</span>
-            <input
-              type="number"
-              min="0"
-              inputMode="numeric"
-              value={form.quantity}
-              onChange={(event) => onChange('quantity', event.target.value)}
-            />
-          </label>
-
-          <label>
-            <span>発注基準数</span>
-            <input
-              type="number"
-              min="0"
-              inputMode="numeric"
-              value={form.reorder_level}
-              onChange={(event) => onChange('reorder_level', event.target.value)}
-            />
-          </label>
-        </div>
-
-        <label>
-          <span>メモ</span>
-          <textarea
-            value={form.memo}
-            onChange={(event) => onChange('memo', event.target.value)}
-            placeholder="仕入先、棚番号、ロットなど"
-            rows="4"
-          />
-        </label>
-
-        <button className="primary-button" type="submit" disabled={saving}>
-          <Save size={22} />
-          {saving ? '登録中...' : '入荷を登録'}
-        </button>
-      </form>
     </section>
   )
 }
 
-function BulkOcrCandidateCard({ candidate, registering, onChange, onRegister, onRemove }) {
+function BulkOcrCandidateCard({ candidate, registering, onChange, onRegister, onRemove, showRemove = true }) {
   const isRegistered = candidate.status === 'registered'
   const isError = candidate.status === 'error'
   const statusText = isRegistered ? '\u767b\u9332\u6e08\u307f' : isError ? '\u8aad\u307f\u53d6\u308a\u5931\u6557' : '\u78ba\u8a8d\u5f85\u3061'
@@ -1627,7 +1538,7 @@ function BulkOcrCandidateCard({ candidate, registering, onChange, onRegister, on
       <div className="bulk-candidate-topline">
         <div>
           <h4>{candidate.sourceLabel}</h4>
-          <p>{'\u5165\u8377\u65e5\uff1a'}{candidate.form.arrival_date}</p>
+          <p>{isRegistered ? '\u767b\u9332\u5b8c\u4e86' : '\u5165\u529b\u5185\u5bb9\u3092\u78ba\u8a8d'}</p>
         </div>
         <span className={`candidate-status ${candidate.status}`}>{statusText}</span>
       </div>
@@ -1649,6 +1560,16 @@ function BulkOcrCandidateCard({ candidate, registering, onChange, onRegister, on
               </option>
             ))}
           </select>
+        </label>
+
+        <label>
+          <span>{'\u5165\u8377\u65e5'}</span>
+          <input
+            type="date"
+            value={candidate.form.arrival_date || ''}
+            onChange={(event) => onChange(candidate.id, 'arrival_date', event.target.value)}
+            disabled={isRegistered || registering}
+          />
         </label>
 
         <label>
@@ -1719,7 +1640,7 @@ function BulkOcrCandidateCard({ candidate, registering, onChange, onRegister, on
         </details>
       )}
 
-      <div className="candidate-actions">
+      <div className={`candidate-actions${showRemove ? '' : ' single'}`}>
         <button
           className="primary-button"
           type="button"
@@ -1728,15 +1649,17 @@ function BulkOcrCandidateCard({ candidate, registering, onChange, onRegister, on
         >
           {registering ? '\u767b\u9332\u4e2d...' : isRegistered ? '\u767b\u9332\u6e08\u307f' : '\u767b\u9332'}
         </button>
-        <button
-          className="delete-item-button"
-          type="button"
-          onClick={() => onRemove(candidate.id)}
-          disabled={registering}
-        >
-          <Trash2 size={18} />
-          {'\u524a\u9664'}
-        </button>
+        {showRemove && (
+          <button
+            className="delete-item-button"
+            type="button"
+            onClick={() => onRemove(candidate.id)}
+            disabled={registering}
+          >
+            <Trash2 size={18} />
+            {'\u524a\u9664'}
+          </button>
+        )}
       </div>
     </article>
   )

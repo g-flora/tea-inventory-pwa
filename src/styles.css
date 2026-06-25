@@ -502,6 +502,36 @@ h1 {
   gap: 10px;
 }
 
+.candidate-grid label {
+  display: grid;
+  gap: 6px;
+}
+
+.candidate-grid label > span {
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 900;
+}
+
+.candidate-grid input,
+.candidate-grid select {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.candidate-grid input:focus,
+.candidate-grid select:focus {
+  border-color: var(--brand);
+  outline: 3px solid rgba(39, 128, 89, 0.16);
+}
+
 .candidate-chip-list {
   display: flex;
   flex-wrap: wrap;
@@ -566,6 +596,10 @@ h1 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
+}
+
+.candidate-actions.single {
+  grid-template-columns: 1fr;
 }
 
 .candidate-actions .primary-button {
@@ -1105,7 +1139,7 @@ h1 {
 
 @media (min-width: 760px) {
   .candidate-grid {
-    grid-template-columns: 1fr 1fr 150px;
+    grid-template-columns: minmax(220px, 1.4fr) 150px 150px 120px;
   }
 }
 
