@@ -1936,7 +1936,7 @@ function CsvView({
   onAirRegiCsvImport,
   onAirRegiCsvApply,
 }) {
-  const previewItems = summarizeInventoryByProductName(items).slice(0, 6)
+  const previewItems = summarizeInventoryByProductName(items)
   const hasAirRegiCsvShortage = airRegiCsvTest.plans.some((plan) => Number(plan.shortageQuantity ?? 0) > 0)
   const hasAirRegiCsvExcludedSales = (airRegiCsvTest.excludedSales?.length ?? 0) > 0
   const hasAirRegiCsvBlockingExcludedSales = (airRegiCsvTest.excludedSales ?? []).some((sale) => sale.blocksApply)
