@@ -1976,9 +1976,9 @@ function CsvView({
             <h2>CSV出力</h2>
           </div>
           <p>
-            {'① 現在の在庫をCSVで保存'}
+            {'① 現在の在庫をCSVでダウンロード'}
             <br />
-            {'ボタンを押すと、現在の在庫一覧をCSVファイルで保存します'}
+            {'ボタンを押すと、現在の在庫一覧をCSVファイルでダウンロードします'}
           </p>
         </div>
         <button className="icon-text-button" type="button" onClick={onRefresh} disabled={loading}>
