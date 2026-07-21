@@ -1993,16 +1993,14 @@ function CsvView({
       </button>
 
       <div className="csv-preview" aria-label="CSVプレビュー">
-        <div className="csv-row head">
+        <div className="csv-row two-column head">
           <span>商品名</span>
-          <span>現在在庫数</span>
-          <span>更新在庫数</span>
+          <span>今の在庫数</span>
         </div>
         {previewItems.length ? (
           previewItems.map((item) => (
-            <div className="csv-row" key={`csv-${item.product_name}`}>
+            <div className="csv-row two-column" key={`csv-${item.product_name}`}>
               <span>{item.product_name}</span>
-              <span>{item.quantity}</span>
               <span>{item.quantity}</span>
             </div>
           ))

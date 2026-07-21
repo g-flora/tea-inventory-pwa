@@ -1285,6 +1285,10 @@ h1 {
   font-size: 0.9rem;
 }
 
+.csv-row.two-column {
+  grid-template-columns: minmax(0, 1fr) minmax(92px, 0.34fr);
+}
+
 .csv-row:first-child {
   border-top: 0;
 }
