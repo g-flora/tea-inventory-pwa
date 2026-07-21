@@ -1894,6 +1894,23 @@ function CsvView({
     if (!(airRegiCsvTest.importItems?.length ?? 0)) return '反映対象なし'
     return '反映できます'
   })()
+  const hasAirRegiCsvResult =
+    Boolean(airRegiCsvTest.csvFingerprint) ||
+    airRegiCsvTest.loading ||
+    Boolean(airRegiCsvTest.message) ||
+    Boolean(airRegiCsvTest.error) ||
+    Boolean(airRegiCsvTest.duplicateCheck?.error) ||
+    (airRegiCsvTest.warnings?.length ?? 0) > 0 ||
+    airRegiCsvTest.groupedSales.length > 0
+  const airRegiCsvSummaryTone =
+    canApplyAirRegiCsv
+      ? 'ready'
+      : airRegiCsvTest.error ||
+          airRegiCsvTest.duplicateCheck?.exists ||
+          hasAirRegiCsvShortage ||
+          hasAirRegiCsvBlockingExcludedSales
+        ? 'blocked'
+        : 'waiting'
 
   function isAcceptedAirRegiCsvFile(file) {
     const fileName = String(file?.name ?? '').toLowerCase()
@@ -1958,7 +1975,11 @@ function CsvView({
             <FileDown size={24} />
             <h2>CSV出力</h2>
           </div>
-          <p>{items.length}件をAirレジ用の列で出力します</p>
+          <p>
+            {'① 現在の在庫をCSVで保存'}
+            <br />
+            {'ボタンを押すと、現在の在庫一覧をCSVファイルで保存します'}
+          </p>
         </div>
         <button className="icon-text-button" type="button" onClick={onRefresh} disabled={loading}>
           <RefreshCcw size={20} />
@@ -1990,43 +2011,17 @@ function CsvView({
         )}
       </div>
 
-      <p className="csv-note">更新種別は「棚卸し・在庫確認」、更新メモは登録メモを使用します。</p>
-
-      <div className="csv-preview" aria-label="Airレジ売上取得テスト結果">
-        <div className="csv-row head">
-          <span>Airレジ売上取得テスト</span>
-          <span>読むだけ</span>
-          <span>在庫更新なし</span>
-        </div>
-        <div className="csv-row">
-          <span>売上明細を取得できるかだけ確認します</span>
-          <span>{airRegiTest.sales.length}件</span>
-          <span>
-            <button className="icon-text-button" type="button" onClick={onAirRegiSalesTest} disabled={airRegiTest.loading}>
-              <Database size={18} />
-              {airRegiTest.loading ? '取得中...' : '売上を取得'}
-            </button>
-          </span>
-        </div>
-        {airRegiTest.message && <div className="empty-state">{airRegiTest.message}</div>}
-        {airRegiTest.error && <div className="empty-state">{airRegiTest.error}</div>}
-        {airRegiTest.sales.map((sale, index) => (
-          <div className="action-row" key={sale.saleLineId || `airregi-sale-${index}`}>
-            <div>
-              <strong>{sale.productName || '商品名なし'}</strong>
-              <span>{`商品コード：${sale.productCode || '-'}`}</span>
-              <span>{`販売日時：${sale.soldAt || '-'}`}</span>
-              <span>{`売上明細ID：${sale.saleLineId || '-'}`}</span>
+      <div className="csv-preview airregi-csv-import" aria-label="Air\u30ec\u30b8\u58f2\u4e0aCSV\u53d6\u308a\u8fbc\u307f\u30c6\u30b9\u30c8">
+        <div className="airregi-import-header">
+          <div>
+            <h3>{'② Air\u30ec\u30b8\u306e\u58f2\u4e0aCSV\u3092\u8aad\u307f\u8fbc\u3080'}</h3>
+            <p>{'Air\u30ec\u30b8\u304b\u3089\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u3057\u305f\u5546\u54c1\u5225\u58f2\u4e0aCSV\u3092\u8aad\u307f\u8fbc\u307f\u307e\u3059'}</p>
+            <div className="airregi-next-step">
+              <strong>{'③ 内容を確認して在庫に反映する'}</strong>
+              <span>{'商品名と数量を確認してから、在庫に反映します'}</span>
             </div>
-            <span className="action-chip">{`販売数量：${sale.quantity}`}</span>
           </div>
-        ))}
-      </div>
-      <div className="csv-preview" aria-label="Air\u30ec\u30b8\u58f2\u4e0aCSV\u53d6\u308a\u8fbc\u307f\u30c6\u30b9\u30c8">
-        <div className="csv-row head">
-          <span>{'Air\u30ec\u30b8\u58f2\u4e0aCSV\u53d6\u308a\u8fbc\u307f\u30c6\u30b9\u30c8'}</span>
-          <span>{'\u8aad\u307f\u8fbc\u3080\u3060\u3051'}</span>
-          <span>{'\u5728\u5eab\u66f4\u65b0\u306a\u3057'}</span>
+          <span>{airRegiCsvApplyStatus}</span>
         </div>
         <div
           className={`csv-drop-area${isAirRegiCsvDragActive ? ' active' : ''}`}
@@ -2038,139 +2033,180 @@ function CsvView({
           <strong>{'CSVファイルをここにドラッグ＆ドロップ'}</strong>
           <span>{'または下のボタンからCSVファイルを選択してください。'}</span>
         </div>
-        <div className="csv-row">
-          <span>{'CSV\u306e\u5546\u54c1\u5225\u58f2\u4e0a\u304b\u3089\u3001\u5728\u5eab\u6e1b\u7b97\u4e88\u5b9a\u3060\u3051\u3092\u8868\u793a\u3057\u307e\u3059\u3002'}</span>
-          <span>{`${airRegiCsvTest.groupedSales.length}\u4ef6`}</span>
-          <span>
-            <input
-              type="file"
-              accept=".csv,text/csv"
-              onChange={handleAirRegiCsvInputChange}
-              disabled={airRegiCsvTest.loading}
-            />
-          </span>
+        <div className="airregi-file-picker">
+          <span>{'CSV\u30d5\u30a1\u30a4\u30eb\u3092\u9078\u629e'}</span>
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            onChange={handleAirRegiCsvInputChange}
+            disabled={airRegiCsvTest.loading}
+          />
         </div>
         {airRegiCsvFileError && <div className="empty-state">{airRegiCsvFileError}</div>}
-        <div className="csv-row">
-          <span>{'選択ファイル'}</span>
-          <span>{airRegiCsvTest.fileName || '未選択'}</span>
-          <span>{airRegiCsvTest.status || '未選択'}</span>
-        </div>
-        <div className="csv-row">
-          <span>{'文字コード'}</span>
-          <span>{airRegiCsvTest.encoding || '未確認'}</span>
-          <span>{airRegiCsvTest.encoding ? `文字コード：${airRegiCsvTest.encoding}` : '-'}</span>
-        </div>
-        {airRegiCsvTest.csvFingerprint && (
-          <div className="csv-row">
-            <span>{'二重取り込みチェック'}</span>
-            <span>{airRegiCsvTest.duplicateCheck?.message || '未確認'}</span>
-            <span>{airRegiCsvTest.duplicateCheck?.exists ? '反映済み' : '未反映'}</span>
-          </div>
-        )}
-        {airRegiCsvTest.duplicateCheck?.error && <div className="empty-state">{airRegiCsvTest.duplicateCheck.error}</div>}
-        {airRegiCsvTest.importItems?.length > 0 && (
-          <div className="csv-row">
-            <span>{'反映対象'}</span>
-            <span>{`${airRegiCsvTest.importItems.length}件`}</span>
-            <span>{`${airRegiCsvImportQuantity}個`}</span>
-          </div>
-        )}
-        {hasAirRegiCsvExcludedSales && (
-          <>
-            <div className="csv-row head">
-              <span>{'反映対象外（反映されません）'}</span>
-              <span>{'数量'}</span>
-              <span>{'理由'}</span>
-            </div>
-            {airRegiCsvTest.excludedSales.map((sale, index) => (
-              <div className="csv-row" key={`airregi-csv-excluded-${sale.productCode || sale.productName || index}`}>
-                <span>{sale.rawProductName || sale.productName || '商品名なし'}</span>
-                <span>{`${sale.quantity ?? 0}個`}</span>
-                <span>{sale.reason || '対象外'}</span>
-              </div>
-            ))}
-          </>
-        )}
-        {airRegiCsvTest.csvFingerprint && (
-          <div className="csv-row">
-            <span>{'在庫反映'}</span>
-            <span>{airRegiCsvApplyStatus}</span>
-            <span>
-              <button type="button" className="download-button" onClick={onAirRegiCsvApply} disabled={!canApplyAirRegiCsv}>
-                {airRegiCsvTest.applying ? '反映中...' : '在庫に反映する'}
-              </button>
-            </span>
-          </div>
-        )}
-        <div className="csv-row">
-          <span>{'CSV 1行目の列名'}</span>
-          <span>{formatCsvHeaders(airRegiCsvTest.firstRowHeaders)}</span>
-          <span>{airRegiCsvTest.firstRowHeaders?.length ? `${airRegiCsvTest.firstRowHeaders.length}列` : '-'}</span>
-        </div>
-        {airRegiCsvTest.detectedColumns && (
-          <>
-            <div className="csv-row">
-              <span>{'商品名列'}</span>
-              <span>{formatCsvColumnStatus(airRegiCsvTest.detectedColumns.productName)}</span>
-              <span>{'確認列：商品名'}</span>
-            </div>
-            <div className="csv-row">
-              <span>{'商品コード列'}</span>
-              <span>{formatCsvColumnStatus(airRegiCsvTest.detectedColumns.productCode)}</span>
-              <span>{'確認列：商品コード'}</span>
-            </div>
-            <div className="csv-row">
-              <span>{'数量列'}</span>
-              <span>{formatCsvColumnStatus(airRegiCsvTest.detectedColumns.quantity)}</span>
-              <span>{'確認列：販売商品数'}</span>
-            </div>
-          </>
-        )}
         {airRegiCsvTest.loading && <div className="empty-state">{'CSV\u3092\u8aad\u307f\u8fbc\u3093\u3067\u3044\u307e\u3059\u3002'}</div>}
         {airRegiCsvTest.message && <div className="empty-state">{airRegiCsvTest.message}</div>}
         {airRegiCsvTest.error && <div className="empty-state">{airRegiCsvTest.error}</div>}
+        {airRegiCsvTest.duplicateCheck?.error && <div className="empty-state">{airRegiCsvTest.duplicateCheck.error}</div>}
         {airRegiCsvTest.warnings?.map((warning, index) => (
           <div className="empty-state" key={`airregi-csv-warning-${index}`}>
             {warning}
           </div>
         ))}
-        {airRegiCsvTest.groupedSales.length > 0 && (
+        {hasAirRegiCsvResult && (
           <>
-            <div className="csv-row head">
-              <span>{'\u8aad\u307f\u53d6\u308a\u7d50\u679c'}</span>
-              <span>{'\u8ca9\u58f2\u6570\u91cf'}</span>
-              <span>{'\u5546\u54c1\u30b3\u30fc\u30c9'}</span>
-            </div>
-            {airRegiCsvTest.groupedSales.map((sale, index) => (
-              <div className="csv-row" key={`airregi-csv-sale-${sale.productCode || sale.productName || index}`}>
-                <span>{sale.productName || '\u5546\u54c1\u540d\u306a\u3057'}</span>
-                <span>{`${sale.quantity}\u500b`}</span>
-                <span>{sale.productCode || '-'}</span>
+            <div className={`airregi-summary-card ${airRegiCsvSummaryTone}`}>
+              <div className="airregi-summary-status">
+                <span>{'反映可否ステータス'}</span>
+                <strong>{airRegiCsvApplyStatus}</strong>
               </div>
-            ))}
+              <div className="airregi-summary-metrics">
+                <div className="airregi-summary-metric">
+                  <span>{'反映対象の商品数'}</span>
+                  <strong>{`${airRegiCsvTest.importItems?.length ?? 0}\u4ef6`}</strong>
+                </div>
+                <div className="airregi-summary-metric">
+                  <span>{'在庫から減る合計数'}</span>
+                  <strong>{`${airRegiCsvImportQuantity}\u500b`}</strong>
+                </div>
+              </div>
+              {airRegiCsvTest.duplicateCheck?.exists && <p>{'反映済みCSVです。'}</p>}
+              {hasAirRegiCsvShortage && <p>{'在庫不足の商品があります。詳細を確認してください。'}</p>}
+              {hasAirRegiCsvBlockingExcludedSales && <p>{'未対応の商品コードがあります。反映前に確認してください。'}</p>}
+              {hasAirRegiCsvExcludedSales && !hasAirRegiCsvBlockingExcludedSales && (
+                <p>{'対象外商品は反映されません。詳細は下の折りたたみから確認できます。'}</p>
+              )}
+              {!canApplyAirRegiCsv && <p>{`ボタンが押せない理由：${airRegiCsvApplyStatus}`}</p>}
+            </div>
+
+            {airRegiCsvTest.importItems?.length > 0 && (
+              <div className="airregi-import-list" aria-label="反映対象の商品一覧">
+                <div className="airregi-import-list-header">
+                  <span>{'反映対象の商品'}</span>
+                  <span>{'販売数量'}</span>
+                </div>
+                {airRegiCsvTest.importItems.map((item, index) => (
+                  <div className="airregi-import-row" key={`airregi-import-item-${item.productName}-${index}`}>
+                    <strong>{item.productName || '商品名なし'}</strong>
+                    <span>{`${item.quantity ?? 0}\u500b`}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {airRegiCsvTest.csvFingerprint && (
+              <div className="airregi-apply-panel">
+                <button
+                  type="button"
+                  className="airregi-apply-button"
+                  onClick={onAirRegiCsvApply}
+                  disabled={!canApplyAirRegiCsv}
+                >
+                  {airRegiCsvTest.applying ? '反映中...' : '在庫に反映する'}
+                </button>
+                <span>{'反映前に確認メッセージが表示されます。'}</span>
+              </div>
+            )}
+
+            <details className="airregi-details">
+              <summary>{'詳細を表示'}</summary>
+              <div className="airregi-detail-content">
+                <div className="csv-row">
+                  <span>{'選択ファイル名'}</span>
+                  <span>{airRegiCsvTest.fileName || '未選択'}</span>
+                  <span>{airRegiCsvTest.status || '未選択'}</span>
+                </div>
+                <div className="csv-row">
+                  <span>{'文字コード'}</span>
+                  <span>{airRegiCsvTest.encoding || '未確認'}</span>
+                  <span>{airRegiCsvTest.encoding || '-'}</span>
+                </div>
+                {airRegiCsvTest.csvFingerprint && (
+                  <div className="csv-row">
+                    <span>{'二重取り込みチェック詳細'}</span>
+                    <span>{airRegiCsvTest.duplicateCheck?.message || '未確認'}</span>
+                    <span>{airRegiCsvTest.duplicateCheck?.exists ? '反映済み' : '未反映'}</span>
+                  </div>
+                )}
+                <div className="csv-row">
+                  <span>{'CSV 1行目の列名'}</span>
+                  <span>{formatCsvHeaders(airRegiCsvTest.firstRowHeaders)}</span>
+                  <span>{airRegiCsvTest.firstRowHeaders?.length ? `${airRegiCsvTest.firstRowHeaders.length}列` : '-'}</span>
+                </div>
+                {airRegiCsvTest.detectedColumns && (
+                  <>
+                    <div className="csv-row">
+                      <span>{'商品名列'}</span>
+                      <span>{formatCsvColumnStatus(airRegiCsvTest.detectedColumns.productName)}</span>
+                      <span>{'確認列：商品名'}</span>
+                    </div>
+                    <div className="csv-row">
+                      <span>{'商品コード列'}</span>
+                      <span>{formatCsvColumnStatus(airRegiCsvTest.detectedColumns.productCode)}</span>
+                      <span>{'確認列：商品コード'}</span>
+                    </div>
+                    <div className="csv-row">
+                      <span>{'数量列'}</span>
+                      <span>{formatCsvColumnStatus(airRegiCsvTest.detectedColumns.quantity)}</span>
+                      <span>{'確認列：販売商品数'}</span>
+                    </div>
+                  </>
+                )}
+                {airRegiCsvTest.groupedSales.length > 0 && (
+                  <>
+                    <div className="csv-row head">
+                      <span>{'\u8aad\u307f\u53d6\u308a\u7d50\u679c\u306e\u751f\u4e00\u89a7'}</span>
+                      <span>{'\u8ca9\u58f2\u6570\u91cf'}</span>
+                      <span>{'\u5546\u54c1\u30b3\u30fc\u30c9'}</span>
+                    </div>
+                    {airRegiCsvTest.groupedSales.map((sale, index) => (
+                      <div className="csv-row" key={`airregi-csv-sale-${sale.productCode || sale.productName || index}`}>
+                        <span>{sale.productName || '\u5546\u54c1\u540d\u306a\u3057'}</span>
+                        <span>{`${sale.quantity}\u500b`}</span>
+                        <span>{sale.productCode || '-'}</span>
+                      </div>
+                    ))}
+                  </>
+                )}
+                {airRegiCsvTest.plans.map((plan, index) => (
+                  <div className="action-row" key={`airregi-csv-plan-${plan.sale.productCode || plan.sale.productName || index}`}>
+                    <div>
+                      <strong>{plan.matchedProductName || plan.sale.productName || '\u5546\u54c1\u540d\u306a\u3057'}</strong>
+                      <span>{`\u8ca9\u58f2\u6570\u91cf\uff1a${plan.requestedQuantity}\u500b`}</span>
+                      <span>{`\u6e1b\u7b97\u4e88\u5b9a\uff1a${plan.plannedQuantity}\u500b`}</span>
+                      {plan.shortageQuantity > 0 && <span>{`\u4e0d\u8db3\uff1a${plan.shortageQuantity}\u500b`}</span>}
+                      {plan.reductions.length ? (
+                        plan.reductions.map((reduction) => (
+                          <span key={`${reduction.inventoryId}-${reduction.expiryDate}`}>
+                            {`${reduction.expiryDate || '-'}\uff1a${reduction.beforeQuantity}\u500b \u2192 ${reduction.afterQuantity}\u500b\uff08-${reduction.reduceQuantity}\u500b\uff09`}
+                          </span>
+                        ))
+                      ) : (
+                        <span>{'\u4e00\u81f4\u3059\u308b\u5728\u5eab\u304c\u3042\u308a\u307e\u305b\u3093\u3002'}</span>
+                      )}
+                    </div>
+                    <span className="action-chip">{'\u4e88\u5b9a\u306e\u307f'}</span>
+                  </div>
+                ))}
+                {hasAirRegiCsvExcludedSales && (
+                  <>
+                    <div className="csv-row head">
+                      <span>{'反映対象外一覧'}</span>
+                      <span>{'数量'}</span>
+                      <span>{'理由'}</span>
+                    </div>
+                    {airRegiCsvTest.excludedSales.map((sale, index) => (
+                      <div className="csv-row" key={`airregi-csv-excluded-${sale.productCode || sale.productName || index}`}>
+                        <span>{sale.rawProductName || sale.productName || '商品名なし'}</span>
+                        <span>{`${sale.quantity ?? 0}個`}</span>
+                        <span>{sale.reason || '対象外'}</span>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            </details>
           </>
         )}
-        {airRegiCsvTest.plans.map((plan, index) => (
-          <div className="action-row" key={`airregi-csv-plan-${plan.sale.productCode || plan.sale.productName || index}`}>
-            <div>
-              <strong>{plan.matchedProductName || plan.sale.productName || '\u5546\u54c1\u540d\u306a\u3057'}</strong>
-              <span>{`\u8ca9\u58f2\u6570\u91cf\uff1a${plan.requestedQuantity}\u500b`}</span>
-              <span>{`\u6e1b\u7b97\u4e88\u5b9a\uff1a${plan.plannedQuantity}\u500b`}</span>
-              {plan.shortageQuantity > 0 && <span>{`\u4e0d\u8db3\uff1a${plan.shortageQuantity}\u500b`}</span>}
-              {plan.reductions.length ? (
-                plan.reductions.map((reduction) => (
-                  <span key={`${reduction.inventoryId}-${reduction.expiryDate}`}>
-                    {`${reduction.expiryDate || '-'}\uff1a${reduction.beforeQuantity}\u500b \u2192 ${reduction.afterQuantity}\u500b\uff08-${reduction.reduceQuantity}\u500b\uff09`}
-                  </span>
-                ))
-              ) : (
-                <span>{'\u4e00\u81f4\u3059\u308b\u5728\u5eab\u304c\u3042\u308a\u307e\u305b\u3093\u3002'}</span>
-              )}
-            </div>
-            <span className="action-chip">{'\u4e88\u5b9a\u306e\u307f'}</span>
-          </div>
-        ))}
       </div>
     </section>
   )
