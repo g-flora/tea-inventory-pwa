@@ -41,6 +41,34 @@ export async function checkAirRegiProcessedCsv(csvFingerprint) {
   }
 }
 
+export async function fetchLatestAirRegiProcessedSale() {
+  if (!hasSupabaseConfig || !supabase) {
+    return {
+      checked: false,
+      record: null,
+      message: 'Supabase connection is not configured.',
+    }
+  }
+
+  const { data, error } = await supabase
+    .from(TABLE_NAME)
+    .select('processed_at, source_filename, status, item_count, total_quantity')
+    .eq('status', 'processed')
+    .order('processed_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return {
+    checked: true,
+    record: data ?? null,
+    message: data ? '前回反映日を取得しました。' : '前回反映日：未反映',
+  }
+}
+
 export async function applyAirRegiCsvImport({ csvFingerprint, sourceFilename, items, memo = '' }) {
   if (!hasSupabaseConfig || !supabase) {
     throw new Error('Supabase connection is not configured.')

@@ -20,7 +20,11 @@ import { createWorker, OEM } from 'tesseract.js'
 import { hasSupabaseConfig, supabase } from './lib/supabaseClient'
 import { fetchAirRegiSalesTest } from './lib/airregi'
 import { groupAirRegiSales, readAirRegiSalesCsvFile } from './lib/airregiCsv'
-import { applyAirRegiCsvImport, checkAirRegiProcessedCsv } from './lib/airregiProcessedSales'
+import {
+  applyAirRegiCsvImport,
+  checkAirRegiProcessedCsv,
+  fetchLatestAirRegiProcessedSale,
+} from './lib/airregiProcessedSales'
 import { buildAirRegiCsv, summarizeInventoryByProductName, todayText } from './lib/inventory'
 import { createInventoryReductionPlan } from './lib/inventoryPlan'
 import {
@@ -152,6 +156,21 @@ function getInventoryStatusForUi(item) {
     labels: ['\u901a\u5e38'],
     detail: buildNormalDetailForUi(remainingDays),
     isAlert: false,
+  }
+}
+
+function formatAirRegiCsvDateRange(record) {
+  const sourceFilename = String(record?.source_filename ?? '')
+  const match = sourceFilename.match(/(\d{8})-(\d{8})/)
+
+  if (!match) return null
+
+  const formatDate = (dateText) => `${dateText.slice(0, 4)}/${dateText.slice(4, 6)}/${dateText.slice(6, 8)}`
+  const startDate = formatDate(match[1])
+  const endDate = formatDate(match[2])
+
+  return {
+    date: startDate === endDate ? startDate : `${startDate} - ${endDate}`,
   }
 }
 
@@ -310,6 +329,12 @@ export default function App() {
     applying: false,
     applyResult: null,
   })
+  const [latestAirRegiProcessedSale, setLatestAirRegiProcessedSale] = useState({
+    loading: false,
+    error: '',
+    checked: false,
+    record: null,
+  })
   const [ocrState, setOcrState] = useState({
     busy: false,
     progress: 0,
@@ -340,9 +365,38 @@ export default function App() {
     setLoading(false)
   }, [])
 
+  const loadLatestAirRegiProcessedSale = useCallback(async () => {
+    if (!hasSupabaseConfig) return
+
+    setLatestAirRegiProcessedSale((current) => ({
+      ...current,
+      loading: true,
+      error: '',
+    }))
+
+    try {
+      const result = await fetchLatestAirRegiProcessedSale()
+
+      setLatestAirRegiProcessedSale({
+        loading: false,
+        error: '',
+        checked: result.checked,
+        record: result.record,
+      })
+    } catch (latestError) {
+      setLatestAirRegiProcessedSale((current) => ({
+        ...current,
+        loading: false,
+        checked: true,
+        error: latestError instanceof Error ? latestError.message : '前回反映日の取得に失敗しました。',
+      }))
+    }
+  }, [])
+
   useEffect(() => {
     loadInventory()
-  }, [loadInventory])
+    loadLatestAirRegiProcessedSale()
+  }, [loadInventory, loadLatestAirRegiProcessedSale])
 
   const enrichedInventory = useMemo(
     () =>
@@ -820,6 +874,7 @@ export default function App() {
       })
 
       await loadInventory()
+      await loadLatestAirRegiProcessedSale()
 
       setAirRegiCsvTest((current) => ({
         ...current,
@@ -994,6 +1049,7 @@ export default function App() {
             loading={loading}
             airRegiTest={airRegiTest}
             airRegiCsvTest={airRegiCsvTest}
+            latestAirRegiProcessedSale={latestAirRegiProcessedSale}
             onRefresh={loadInventory}
             onDownload={downloadCsv}
             onAirRegiSalesTest={runAirRegiSalesTest}
@@ -1853,6 +1909,7 @@ function CsvView({
   loading,
   airRegiTest,
   airRegiCsvTest,
+  latestAirRegiProcessedSale,
   onRefresh,
   onDownload,
   onAirRegiSalesTest,
@@ -1911,6 +1968,7 @@ function CsvView({
           hasAirRegiCsvBlockingExcludedSales
         ? 'blocked'
         : 'waiting'
+  const latestAirRegiCsvDateRange = formatAirRegiCsvDateRange(latestAirRegiProcessedSale?.record)
 
   function isAcceptedAirRegiCsvFile(file) {
     const fileName = String(file?.name ?? '').toLowerCase()
@@ -2017,6 +2075,18 @@ function CsvView({
             <div className="airregi-next-step">
               <strong>{'③ 内容を確認して在庫に反映する'}</strong>
               <span>{'商品名と数量を確認してから、在庫に反映します'}</span>
+            </div>
+            <div className="airregi-last-import">
+              <span>{'前回取込期間'}</span>
+              {latestAirRegiProcessedSale?.loading ? (
+                <strong>{'確認中'}</strong>
+              ) : latestAirRegiProcessedSale?.error ? (
+                <strong>{'取得できませんでした'}</strong>
+              ) : latestAirRegiCsvDateRange ? (
+                <strong>{latestAirRegiCsvDateRange.date}</strong>
+              ) : (
+                <strong>{latestAirRegiProcessedSale?.record ? '期間不明' : '未反映'}</strong>
+              )}
             </div>
           </div>
           <span>{airRegiCsvApplyStatus}</span>

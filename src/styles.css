@@ -1059,6 +1059,42 @@ h1 {
   line-height: 1.45;
 }
 
+.airregi-last-import {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  border: 1px solid rgba(40, 115, 94, 0.16);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.airregi-last-import span,
+.airregi-last-import strong,
+.airregi-last-import em {
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.airregi-last-import span {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.airregi-last-import strong {
+  color: var(--brand);
+  font-style: normal;
+  font-weight: 900;
+}
+
+.airregi-last-import em {
+  color: var(--ink);
+  font-style: normal;
+  font-weight: 900;
+}
+
 .csv-drop-area {
   display: grid;
   place-items: center;
