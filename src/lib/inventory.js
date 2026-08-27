@@ -2,10 +2,7 @@ export const AIR_REGI_UPDATE_TYPE = '棚卸し・在庫確認'
 
 export const CSV_HEADERS = [
   '商品名',
-  '現在在庫数',
-  '更新在庫数',
-  '更新種別',
-  '更新メモ',
+  '今の在庫数',
 ]
 
 export function todayText() {
@@ -105,9 +102,6 @@ export function buildAirRegiCsv(items) {
   const rows = summarizeInventoryByProductName(items).map((item) => [
     item.product_name,
     item.quantity,
-    item.quantity,
-    AIR_REGI_UPDATE_TYPE,
-    item.memo || '',
   ])
 
   return [CSV_HEADERS, ...rows].map((row) => row.map(escapeCsvValue).join(',')).join('\r\n')
